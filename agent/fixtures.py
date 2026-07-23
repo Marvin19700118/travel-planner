@@ -86,8 +86,16 @@ def get_weather(city: str, lat: float, lng: float, dates: list[str]) -> list[dic
     ]
 
 
+# A real, validly-encoded polyline (Google's own algorithm-format example:
+# decodes to (38.5,-120.2), (40.7,-120.95), (43.252,-126.453)) — not the
+# fixture city's actual coordinates, but a genuine decodable string, so
+# testing the map against real decodePath() doesn't require TEST_MODE=false.
+_SAMPLE_POLYLINE = "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
+
+
 def get_directions(city: str, stops: list[dict]) -> dict:
     entry = CITIES.get(city.strip().lower())
     per_gap = entry["travel_hr_per_gap"] if entry else 0.25
     gaps = max(0, len(stops) - 1)
-    return {"travel_hours": gaps * per_gap, "polyline": "fixture-polyline"}
+    polyline = _SAMPLE_POLYLINE if gaps > 0 else None
+    return {"travel_hours": gaps * per_gap, "polyline": polyline}

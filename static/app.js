@@ -171,6 +171,13 @@ function renderMapTabs(dayAllocations, dayPolylines) {
   }
 }
 
+function showMapUnavailable(message) {
+  mapUnavailable.textContent = message;
+  mapUnavailable.classList.remove("hidden");
+  mapDiv.classList.add("hidden");
+  mapTabs.classList.add("hidden");
+}
+
 async function showMap(dayAllocations, dayPolylines) {
   if (!dayAllocations || !Object.keys(dayAllocations).length) {
     mapSection.classList.add("hidden");
@@ -179,20 +186,14 @@ async function showMap(dayAllocations, dayPolylines) {
   mapSection.classList.remove("hidden");
 
   if (!mapsApiKey) {
-    mapUnavailable.textContent = "Map isn't configured on this deployment yet.";
-    mapUnavailable.classList.remove("hidden");
-    mapDiv.classList.add("hidden");
-    mapTabs.classList.add("hidden");
+    showMapUnavailable("Map isn't configured on this deployment yet.");
     return;
   }
 
   try {
     await loadMapsScript();
   } catch {
-    mapUnavailable.textContent = "Couldn't load the map.";
-    mapUnavailable.classList.remove("hidden");
-    mapDiv.classList.add("hidden");
-    mapTabs.classList.add("hidden");
+    showMapUnavailable("Couldn't load the map.");
     return;
   }
 
