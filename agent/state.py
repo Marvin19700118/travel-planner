@@ -1,9 +1,22 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal, TypedDict
+from dataclasses import dataclass, field
+from typing import Any, Callable, Literal, TypedDict
 
 Status = Literal["in_progress", "done", "infeasible", "no_results", "failed_max_iterations"]
+
+
+@dataclass
+class RunCache:
+    """A per-run memo for tool calls. Kept in state (not module-level) so a
+    cache never leaks between runs — each run gets its own empty cache."""
+
+    _store: dict[tuple, Any] = field(default_factory=dict)
+
+    def get_or_compute(self, key: tuple, compute: Callable[[], Any]) -> Any:
+        if key not in self._store:
+            self._store[key] = compute()
+        return self._store[key]
 
 
 @dataclass(frozen=True)
@@ -26,6 +39,7 @@ class PlannerState(TypedDict):
     lat: float | None
     lng: float | None
     candidates: dict[str, list[dict]]
+    cache: RunCache
 
     iteration: int
     max_iterations: int
@@ -55,6 +69,7 @@ def new_state(request: TripRequest) -> PlannerState:
         lat=None,
         lng=None,
         candidates={},
+        cache=RunCache(),
         iteration=0,
         max_iterations=8,
         consecutive_no_improvement=0,

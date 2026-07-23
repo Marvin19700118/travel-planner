@@ -8,8 +8,10 @@ import os
 
 os.environ["TEST_MODE"] = "true"
 
-from agent.graph import run_planner  # noqa: E402
-from agent.state import TripRequest  # noqa: E402
+from agent import graph as graph_module  # noqa: E402
+from agent import tools as tools_module  # noqa: E402
+from agent.graph import _compute_day_total, run_planner  # noqa: E402
+from agent.state import RunCache, TripRequest  # noqa: E402
 
 
 def _trip(city: str, days: int, preferences: list[str]) -> TripRequest:
@@ -108,3 +110,23 @@ def test_give_up_report_names_the_specific_gap():
 
     assert "day1" in final["final_report"]
     assert "over by" in final["final_report"]
+
+
+def test_repeated_directions_lookup_within_a_run_hits_the_tool_once(monkeypatch):
+    calls = []
+    real_get_directions = tools_module.get_directions
+
+    def counting_get_directions(city, stop_ids):
+        calls.append((city, tuple(stop_ids)))
+        return real_get_directions(city, stop_ids)
+
+    monkeypatch.setattr(graph_module.tools, "get_directions", counting_get_directions)
+
+    state = {"city": "testville", "cache": RunCache()}
+    items = [{"id": "f1", "duration_hr": 1.0}, {"id": "f2", "duration_hr": 1.0}]
+
+    first = _compute_day_total(state, items)  # type: ignore[arg-type]
+    second = _compute_day_total(state, items)  # type: ignore[arg-type]
+
+    assert first == second
+    assert len(calls) == 1, "the second identical lookup should be served from the run cache"

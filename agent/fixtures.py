@@ -21,11 +21,11 @@ CITIES: dict[str, dict] = {
         "travel_hr_per_gap": 0.25,
         "candidates": {
             "museum": [
-                {"id": "m1", "name": "Testville Museum", "duration_hr": 1.5, "category": "museum"},
+                {"id": "m1", "name": "Testville Museum", "duration_hr": 1.5, "category": "museum", "lat": 10.01, "lng": 20.01},
             ],
             "food": [
-                {"id": "f1", "name": "Testville Cafe", "duration_hr": 1.0, "category": "food"},
-                {"id": "f2", "name": "Testville Diner", "duration_hr": 1.0, "category": "food"},
+                {"id": "f1", "name": "Testville Cafe", "duration_hr": 1.0, "category": "food", "lat": 10.02, "lng": 20.02},
+                {"id": "f2", "name": "Testville Diner", "duration_hr": 1.0, "category": "food", "lat": 10.03, "lng": 20.03},
             ],
         },
     },
@@ -34,10 +34,10 @@ CITIES: dict[str, dict] = {
         "travel_hr_per_gap": 1.0,
         "candidates": {
             "hiking": [
-                {"id": "h1", "name": "Sprawlville Trail", "duration_hr": 3.0, "category": "hiking"},
+                {"id": "h1", "name": "Sprawlville Trail", "duration_hr": 3.0, "category": "hiking", "lat": 30.5, "lng": 40.0},
             ],
             "golf": [
-                {"id": "g1", "name": "Sprawlville Golf Course", "duration_hr": 4.5, "category": "golf"},
+                {"id": "g1", "name": "Sprawlville Golf Course", "duration_hr": 4.5, "category": "golf", "lat": 30.0, "lng": 40.5},
             ],
         },
     },
@@ -51,7 +51,14 @@ CITIES: dict[str, dict] = {
         "travel_hr_per_gap": 0.0,
         "candidates": {
             "food": [
-                {"id": f"loop-{i}", "name": f"Loopville Snack Stop {i}", "duration_hr": 1.0, "category": "food"}
+                {
+                    "id": f"loop-{i}",
+                    "name": f"Loopville Snack Stop {i}",
+                    "duration_hr": 1.0,
+                    "category": "food",
+                    "lat": 70.0 + i * 0.001,
+                    "lng": 80.0 + i * 0.001,
+                }
                 for i in range(20)
             ],
         },
@@ -71,15 +78,15 @@ def search_places(city: str, category: str) -> list[dict]:
     return list(entry["candidates"].get(category, []))
 
 
-def get_weather(city: str, dates: list[str]) -> list[dict]:
+def get_weather(city: str, lat: float, lng: float, dates: list[str]) -> list[dict]:
     return [
         {"date": d, "condition": "sunny", "temp_c": 28, "rain_chance": 0.1, "success": True}
         for d in dates
     ]
 
 
-def get_directions(city: str, stop_ids: list[str]) -> dict:
+def get_directions(city: str, stops: list[dict]) -> dict:
     entry = CITIES.get(city.strip().lower())
     per_gap = entry["travel_hr_per_gap"] if entry else 0.25
-    gaps = max(0, len(stop_ids) - 1)
+    gaps = max(0, len(stops) - 1)
     return {"travel_hours": gaps * per_gap, "polyline": "fixture-polyline"}

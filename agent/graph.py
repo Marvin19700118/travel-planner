@@ -3,7 +3,11 @@ route -> (loop back to think | one of three finalize nodes -> END).
 
 `think` decides what to do next and writes it to `actions`; `act` is the only
 place that calls the tools module; `reflect` writes a self-critique sentence;
-`route_after_reflect` is pure logic with no tool/LLM calls.
+`route_after_reflect` is pure logic with no tool/LLM calls. Both `think` and
+`reflect` route their text through `llm.narrate_*`, which uses real Gemini
+output when GEMINI_API_KEY is set and falls back to the deterministic text
+otherwise — see agent/llm.py for why tool *selection* itself never depends
+on the LLM being available.
 """
 
 from __future__ import annotations
@@ -12,7 +16,7 @@ from typing import Any, Iterator
 
 from langgraph.graph import END, StateGraph
 
-from . import tools
+from . import llm, tools
 from .state import PlannerState, TripRequest, day_key, new_state
 
 TOURING_HOURS_PER_DAY = 8.0
@@ -25,8 +29,9 @@ TOURING_HOURS_PER_DAY = 8.0
 
 def prepare(request: TripRequest) -> PlannerState:
     state = new_state(request)
+    cache = state["cache"]
 
-    coords = tools.geocode(request.city)
+    coords = cache.get_or_compute(("geocode", request.city), lambda: tools.geocode(request.city))
     if coords is None:
         state["status"] = "no_results"
         state["final_report"] = f'Couldn\'t find "{request.city}" — please check the city name and try again.'
@@ -36,7 +41,10 @@ def prepare(request: TripRequest) -> PlannerState:
     candidates: dict[str, list[dict]] = {}
     no_results: list[str] = []
     for pref in request.preferences:
-        found = tools.search_places(request.city, pref)
+        def _search(city: str = request.city, category: str = pref) -> list[dict]:
+            return tools.search_places(city, category)
+
+        found = cache.get_or_compute(("search_places", request.city, pref), _search)
         candidates[pref] = found
         if not found:
             no_results.append(pref)
@@ -72,10 +80,15 @@ def _initial_allocation(state: PlannerState) -> dict[str, list[dict]]:
     return allocation
 
 
-def _compute_day_total(city: str, day_items: list[dict]) -> float:
+def _compute_day_total(state: PlannerState, day_items: list[dict]) -> float:
     duration = sum(item["duration_hr"] for item in day_items)
-    stop_ids = [item["id"] for item in day_items]
-    directions = tools.get_directions(city, stop_ids)
+    stop_ids = tuple(item["id"] for item in day_items)
+    city = state["city"]
+
+    def _lookup() -> dict:
+        return tools.get_directions(city, day_items)
+
+    directions = state["cache"].get_or_compute(("get_directions", city, stop_ids), _lookup)
     return duration + directions["travel_hours"]
 
 
@@ -109,15 +122,21 @@ def _observe(tool: str, result: object, *, success: bool = True, error: str | No
 
 
 def think(state: PlannerState) -> dict:
+    # NOTE: which tool runs next is decided here deterministically regardless
+    # of whether an LLM is configured — see agent/llm.py's module docstring
+    # for why. `fallback_thought` is both the deterministic text used when no
+    # Gemini key is set, and the factual basis Gemini paraphrases when one is.
     iteration = state["iteration"] + 1
     thoughts = list(state["thoughts"])
     actions = list(state["actions"])
 
     if iteration == 1:
-        thought = "Let's check the weather for this trip before anything else."
+        fallback_thought = "Let's check the weather for this trip before anything else."
         action = {"tool": "get_weather", "input": {}}
     elif iteration == 2:
-        thought = "Now let's lay out a first draft across all the days and see how the travel time adds up."
+        fallback_thought = (
+            "Now let's lay out a first draft across all the days and see how the travel time adds up."
+        )
         action = {"tool": "initial_allocate_and_check", "input": {}}
     else:
         over_time = state["over_time_days"]
@@ -126,23 +145,24 @@ def think(state: PlannerState) -> dict:
             counts = _preference_counts(state["day_allocations"])
             candidate = _find_trimmable(state["day_allocations"].get(worst_day, []), counts)
             if candidate:
-                thought = (
+                fallback_thought = (
                     f'{worst_day} is over budget. Let\'s drop "{candidate["name"]}", '
                     "the least essential remaining stop, and recheck."
                 )
             else:
-                thought = (
+                fallback_thought = (
                     f"{worst_day} is still over budget, but every remaining stop is the only "
                     "representative of its preference — there's nothing safe left to trim."
                 )
             action = {"tool": "trim_worst_day", "input": {"day": worst_day}}
         else:
-            thought = (
+            fallback_thought = (
                 "Every day fits, but not every preference is represented yet — "
                 "there's nothing further we can safely do."
             )
             action = {"tool": "trim_worst_day", "input": {"day": None}}
 
+    thought = llm.narrate_thought(fallback_thought, fallback=fallback_thought)
     thoughts.append(thought)
     actions.append(action)
     return {"iteration": iteration, "thoughts": thoughts, "actions": actions}
@@ -160,7 +180,14 @@ def act(state: PlannerState) -> dict:
 
     if tool == "get_weather":
         try:
-            results = tools.get_weather(state["city"], [state["start_date"]])
+            # lat/lng are always set by this point: prepare() returns early with
+            # status="no_results" when geocoding fails, before the loop ever starts.
+            assert state["lat"] is not None and state["lng"] is not None
+            lat, lng = state["lat"], state["lng"]
+            results = state["cache"].get_or_compute(
+                ("get_weather", state["city"], state["start_date"]),
+                lambda: tools.get_weather(state["city"], lat, lng, [state["start_date"]]),
+            )
             observations.append(_observe(tool, results))
             for r in results:
                 weather_notes.append(f"{r['date']}: {r['condition']}, {r['temp_c']}°C")
@@ -171,7 +198,7 @@ def act(state: PlannerState) -> dict:
         day_allocations = _initial_allocation(state)
         over_time_days = []
         for day, items in day_allocations.items():
-            total = _compute_day_total(state["city"], items)
+            total = _compute_day_total(state, items)
             day_totals[day] = total
             if total > TOURING_HOURS_PER_DAY:
                 over_time_days.append(day)
@@ -189,7 +216,7 @@ def act(state: PlannerState) -> dict:
             if candidate:
                 items.remove(candidate)
                 day_allocations[day] = items
-                total = _compute_day_total(state["city"], items)
+                total = _compute_day_total(state, items)
                 day_totals[day] = total
                 consecutive_no_improvement = 0 if total < before else consecutive_no_improvement + 1
                 observations.append(_observe(tool, {"removed": candidate["name"], "day": day, "new_total": total}))
@@ -215,32 +242,34 @@ def reflect(state: PlannerState) -> dict:
     latest = state["observations"][-1] if state["observations"] else None
 
     if latest is None:
-        reflections.append("Nothing to reflect on yet.")
+        fallback_reflection = "Nothing to reflect on yet."
     elif latest["tool"] == "get_weather":
         if latest["success"]:
-            reflections.append("Weather noted for reference; it won't change the schedule.")
+            fallback_reflection = "Weather noted for reference; it won't change the schedule."
         else:
-            reflections.append("Couldn't get a forecast (likely outside the supported date range) — skipping it.")
+            fallback_reflection = "Couldn't get a forecast (likely outside the supported date range) — skipping it."
     elif latest["tool"] == "initial_allocate_and_check":
         if state["over_time_days"]:
-            reflections.append(
+            fallback_reflection = (
                 f"Day(s) over budget: {', '.join(state['over_time_days'])}. Still not good enough — need to trim."
             )
         else:
-            reflections.append("Every day fits within the touring budget so far.")
-    elif latest["tool"] == "trim_worst_day":
+            fallback_reflection = "Every day fits within the touring budget so far."
+    else:  # trim_worst_day
         result = latest["result"]
         if result.get("removed"):
-            reflections.append(
+            fallback_reflection = (
                 f'Removed "{result["removed"]}" from {result["day"]}; new total is '
                 f'{result["new_total"]:.1f}h. Better, but let\'s check if it\'s enough.'
             )
         else:
-            reflections.append(
+            fallback_reflection = (
                 "Couldn't safely remove anything more without dropping a preference entirely. "
                 "Still not good enough."
             )
 
+    reflection = llm.narrate_reflection(fallback_reflection, fallback=fallback_reflection)
+    reflections.append(reflection)
     return {"reflections": reflections}
 
 
