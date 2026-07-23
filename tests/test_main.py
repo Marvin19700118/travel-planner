@@ -26,6 +26,16 @@ def _collect_sse_events(client: TestClient, run_id: str) -> list[dict]:
     return events
 
 
+def test_config_reports_empty_maps_key_when_unset(client, monkeypatch):
+    monkeypatch.delenv("GOOGLE_MAPS_JS_API_KEY", raising=False)
+    assert client.get("/api/config").json() == {"mapsApiKey": ""}
+
+
+def test_config_reports_the_maps_key_when_set(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_MAPS_JS_API_KEY", "browser-key")
+    assert client.get("/api/config").json() == {"mapsApiKey": "browser-key"}
+
+
 def test_start_plan_returns_a_run_id(client):
     response = client.post(
         "/api/plan",

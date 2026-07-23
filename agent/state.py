@@ -54,6 +54,7 @@ class PlannerState(TypedDict):
 
     day_allocations: dict[str, list[dict]]
     day_totals: dict[str, float]
+    day_polylines: dict[str, str | None]
     over_time_days: list[str]
 
     status: Status
@@ -80,6 +81,7 @@ def new_state(request: TripRequest) -> PlannerState:
         weather_notes=[],
         day_allocations={},
         day_totals={},
+        day_polylines={},
         over_time_days=[],
         status="in_progress",
         final_report=None,

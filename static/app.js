@@ -5,6 +5,10 @@ const resultView = document.getElementById("result-view");
 const resultTitle = document.getElementById("result-title");
 const resultMessage = document.getElementById("result-message");
 const itineraryEl = document.getElementById("itinerary");
+const mapSection = document.getElementById("map-section");
+const mapTabs = document.getElementById("map-tabs");
+const mapDiv = document.getElementById("map");
+const mapUnavailable = document.getElementById("map-unavailable");
 
 const STATUS_TITLES = {
   done: "Your itinerary is ready",
@@ -72,7 +76,137 @@ function showResult(finalContent) {
   resultTitle.textContent = STATUS_TITLES[finalContent.status] || "Result";
   resultMessage.textContent = finalContent.final_report;
   renderItinerary(finalContent.day_allocations);
+
+  if (finalContent.status === "done") {
+    showMap(finalContent.day_allocations, finalContent.day_polylines);
+  } else {
+    mapSection.classList.add("hidden");
+  }
 }
+
+// --- Interactive map (ticket #4) ------------------------------------------
+// The map only ever draws data the backend already computed (day
+// allocations + the Directions polyline captured during the planning loop)
+// — it never issues its own route-calculation call.
+
+let mapsApiKey = null;
+let map = null;
+let activeOverlays = [];
+
+async function loadMapsConfig() {
+  try {
+    const response = await fetch("/api/config");
+    const config = await response.json();
+    mapsApiKey = config.mapsApiKey || null;
+  } catch {
+    mapsApiKey = null;
+  }
+}
+
+function loadMapsScript() {
+  return new Promise((resolve, reject) => {
+    if (window.google && window.google.maps) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(mapsApiKey)}&libraries=geometry`;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("failed to load Google Maps"));
+    document.head.appendChild(script);
+  });
+}
+
+function clearOverlays() {
+  activeOverlays.forEach((overlay) => overlay.setMap(null));
+  activeOverlays = [];
+}
+
+function renderDay(day, dayAllocations, dayPolylines) {
+  clearOverlays();
+  const stops = dayAllocations[day] || [];
+  const bounds = new google.maps.LatLngBounds();
+
+  stops.forEach((stop) => {
+    const position = { lat: stop.lat, lng: stop.lng };
+    const marker = new google.maps.Marker({ position, map, title: stop.name });
+    const infoWindow = new google.maps.InfoWindow({
+      content: `<strong>${stop.name}</strong><br>${stop.address || ""}<br>${stop.duration_hr}h`,
+    });
+    marker.addListener("click", () => infoWindow.open(map, marker));
+    activeOverlays.push(marker);
+    bounds.extend(position);
+  });
+
+  const polyline = dayPolylines ? dayPolylines[day] : null;
+  if (polyline) {
+    const path = google.maps.geometry.encoding.decodePath(polyline);
+    const line = new google.maps.Polyline({ path, map, strokeColor: "#ff8c66", strokeWeight: 4 });
+    activeOverlays.push(line);
+  }
+
+  if (!bounds.isEmpty()) {
+    map.fitBounds(bounds);
+  }
+}
+
+function renderMapTabs(dayAllocations, dayPolylines) {
+  mapTabs.innerHTML = "";
+  const days = Object.keys(dayAllocations).sort();
+  days.forEach((day, index) => {
+    const button = document.createElement("button");
+    button.textContent = day;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-selected", index === 0 ? "true" : "false");
+    button.addEventListener("click", () => {
+      [...mapTabs.children].forEach((b) => b.setAttribute("aria-selected", "false"));
+      button.setAttribute("aria-selected", "true");
+      renderDay(day, dayAllocations, dayPolylines);
+    });
+    mapTabs.appendChild(button);
+  });
+  if (days.length) {
+    renderDay(days[0], dayAllocations, dayPolylines);
+  }
+}
+
+async function showMap(dayAllocations, dayPolylines) {
+  if (!dayAllocations || !Object.keys(dayAllocations).length) {
+    mapSection.classList.add("hidden");
+    return;
+  }
+  mapSection.classList.remove("hidden");
+
+  if (!mapsApiKey) {
+    mapUnavailable.textContent = "Map isn't configured on this deployment yet.";
+    mapUnavailable.classList.remove("hidden");
+    mapDiv.classList.add("hidden");
+    mapTabs.classList.add("hidden");
+    return;
+  }
+
+  try {
+    await loadMapsScript();
+  } catch {
+    mapUnavailable.textContent = "Couldn't load the map.";
+    mapUnavailable.classList.remove("hidden");
+    mapDiv.classList.add("hidden");
+    mapTabs.classList.add("hidden");
+    return;
+  }
+
+  mapUnavailable.classList.add("hidden");
+  mapDiv.classList.remove("hidden");
+  mapTabs.classList.remove("hidden");
+
+  if (!map) {
+    map = new google.maps.Map(mapDiv, { zoom: 12, center: { lat: 0, lng: 0 } });
+  }
+  renderMapTabs(dayAllocations, dayPolylines);
+}
+
+loadMapsConfig();
 
 form.addEventListener("submit", async (submitEvent) => {
   submitEvent.preventDefault();

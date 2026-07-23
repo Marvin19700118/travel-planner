@@ -58,6 +58,7 @@ def test_search_places_maps_category_to_a_query_and_estimates_duration(monkeypat
                         "displayName": {"text": "Louvre Museum"},
                         "location": {"latitude": 48.86, "longitude": 2.34},
                         "types": ["museum", "tourist_attraction"],
+                        "formattedAddress": "Rue de Rivoli, 75001 Paris",
                     }
                 ]
             }
@@ -70,8 +71,17 @@ def test_search_places_maps_category_to_a_query_and_estimates_duration(monkeypat
     assert captured["url"] == tools._PLACES_SEARCH_URL
     assert captured["json"]["textQuery"] == "museums in Paris"
     assert captured["headers"]["X-Goog-Api-Key"] == "test-key"
+    assert captured["headers"]["X-Goog-FieldMask"].endswith("formattedAddress")
     assert results == [
-        {"id": "p1", "name": "Louvre Museum", "lat": 48.86, "lng": 2.34, "category": "museum", "duration_hr": 1.5}
+        {
+            "id": "p1",
+            "name": "Louvre Museum",
+            "lat": 48.86,
+            "lng": 2.34,
+            "category": "museum",
+            "duration_hr": 1.5,
+            "address": "Rue de Rivoli, 75001 Paris",
+        }
     ]
 
 

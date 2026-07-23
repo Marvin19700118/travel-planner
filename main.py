@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import uuid
 from typing import AsyncIterator
 
@@ -95,6 +96,18 @@ async def replay_plan(run_id: str) -> dict:
     if record is None:
         raise HTTPException(status_code=404, detail="Unknown run_id")
     return record
+
+
+@app.get("/api/config")
+async def get_config() -> dict:
+    """Client-safe config only. GOOGLE_MAPS_JS_API_KEY is deliberately a
+    separate key from GOOGLE_MAPS_API_KEY (used server-side for Geocoding/
+    Places/Directions/Weather) — this one is meant to be visible in the
+    browser and should be restricted by HTTP referrer in the Cloud Console.
+    An empty string means the map isn't configured yet; the frontend should
+    degrade to a "map unavailable" state rather than trying to load it.
+    """
+    return {"mapsApiKey": os.environ.get("GOOGLE_MAPS_JS_API_KEY", "")}
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

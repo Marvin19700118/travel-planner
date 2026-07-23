@@ -21,11 +21,11 @@ CITIES: dict[str, dict] = {
         "travel_hr_per_gap": 0.25,
         "candidates": {
             "museum": [
-                {"id": "m1", "name": "Testville Museum", "duration_hr": 1.5, "category": "museum", "lat": 10.01, "lng": 20.01},
+                {"id": "m1", "name": "Testville Museum", "duration_hr": 1.5, "category": "museum", "lat": 10.01, "lng": 20.01, "address": "1 Museum Way, Testville"},
             ],
             "food": [
-                {"id": "f1", "name": "Testville Cafe", "duration_hr": 1.0, "category": "food", "lat": 10.02, "lng": 20.02},
-                {"id": "f2", "name": "Testville Diner", "duration_hr": 1.0, "category": "food", "lat": 10.03, "lng": 20.03},
+                {"id": "f1", "name": "Testville Cafe", "duration_hr": 1.0, "category": "food", "lat": 10.02, "lng": 20.02, "address": "2 Cafe St, Testville"},
+                {"id": "f2", "name": "Testville Diner", "duration_hr": 1.0, "category": "food", "lat": 10.03, "lng": 20.03, "address": "3 Diner Ave, Testville"},
             ],
         },
     },
@@ -34,10 +34,10 @@ CITIES: dict[str, dict] = {
         "travel_hr_per_gap": 1.0,
         "candidates": {
             "hiking": [
-                {"id": "h1", "name": "Sprawlville Trail", "duration_hr": 3.0, "category": "hiking", "lat": 30.5, "lng": 40.0},
+                {"id": "h1", "name": "Sprawlville Trail", "duration_hr": 3.0, "category": "hiking", "lat": 30.5, "lng": 40.0, "address": "Trailhead Rd, Sprawlville"},
             ],
             "golf": [
-                {"id": "g1", "name": "Sprawlville Golf Course", "duration_hr": 4.5, "category": "golf", "lat": 30.0, "lng": 40.5},
+                {"id": "g1", "name": "Sprawlville Golf Course", "duration_hr": 4.5, "category": "golf", "lat": 30.0, "lng": 40.5, "address": "Fairway Dr, Sprawlville"},
             ],
         },
     },
@@ -58,6 +58,7 @@ CITIES: dict[str, dict] = {
                     "category": "food",
                     "lat": 70.0 + i * 0.001,
                     "lng": 80.0 + i * 0.001,
+                    "address": f"{i} Snack Row, Loopville",
                 }
                 for i in range(20)
             ],

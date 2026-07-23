@@ -10,7 +10,7 @@ os.environ["TEST_MODE"] = "true"
 
 from agent import graph as graph_module  # noqa: E402
 from agent import tools as tools_module  # noqa: E402
-from agent.graph import _compute_day_total, run_planner  # noqa: E402
+from agent.graph import _compute_day_metrics, run_planner  # noqa: E402
 from agent.state import RunCache, TripRequest  # noqa: E402
 
 
@@ -35,6 +35,16 @@ def test_satisfiable_request_reaches_done_within_iteration_cap():
 
     covered = {item["preference"] for items in final["day_allocations"].values() for item in items}
     assert covered == {"museum", "food"}
+
+
+def test_done_result_carries_a_route_polyline_per_day_for_the_map():
+    events = list(run_planner(_trip("testville", 2, ["museum", "food"])))
+    final = _final(events)
+
+    assert set(final["day_polylines"]) == set(final["day_allocations"])
+    for day in final["day_allocations"]:
+        for stop in final["day_allocations"][day]:
+            assert "lat" in stop and "lng" in stop and "address" in stop
 
 
 def test_live_events_stream_before_the_final_outcome():
@@ -125,8 +135,8 @@ def test_repeated_directions_lookup_within_a_run_hits_the_tool_once(monkeypatch)
     state = {"city": "testville", "cache": RunCache()}
     items = [{"id": "f1", "duration_hr": 1.0}, {"id": "f2", "duration_hr": 1.0}]
 
-    first = _compute_day_total(state, items)  # type: ignore[arg-type]
-    second = _compute_day_total(state, items)  # type: ignore[arg-type]
+    first = _compute_day_metrics(state, items)  # type: ignore[arg-type]
+    second = _compute_day_metrics(state, items)  # type: ignore[arg-type]
 
     assert first == second
     assert len(calls) == 1, "the second identical lookup should be served from the run cache"

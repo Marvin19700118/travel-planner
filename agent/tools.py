@@ -100,7 +100,7 @@ def search_places(city: str, category: str) -> list[dict]:
         headers={
             "Content-Type": "application/json",
             "X-Goog-Api-Key": key,
-            "X-Goog-FieldMask": "places.id,places.displayName,places.location,places.types",
+            "X-Goog-FieldMask": "places.id,places.displayName,places.location,places.types,places.formattedAddress",
         },
         timeout=_REQUEST_TIMEOUT_SECONDS,
     )
@@ -118,6 +118,7 @@ def search_places(city: str, category: str) -> list[dict]:
                 "lng": location.get("longitude"),
                 "category": category,
                 "duration_hr": _estimate_duration_hr(place.get("types") or []),
+                "address": place.get("formattedAddress", ""),
             }
         )
     return results

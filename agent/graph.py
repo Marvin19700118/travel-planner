@@ -80,7 +80,11 @@ def _initial_allocation(state: PlannerState) -> dict[str, list[dict]]:
     return allocation
 
 
-def _compute_day_total(state: PlannerState, day_items: list[dict]) -> float:
+def _compute_day_metrics(state: PlannerState, day_items: list[dict]) -> dict:
+    """Returns {"total": hours, "polyline": route geometry or None}. The
+    polyline comes straight from the same Directions call used for the
+    feasibility check — the map (ticket #4) reuses it rather than asking
+    the browser to compute its own route."""
     duration = sum(item["duration_hr"] for item in day_items)
     stop_ids = tuple(item["id"] for item in day_items)
     city = state["city"]
@@ -89,7 +93,7 @@ def _compute_day_total(state: PlannerState, day_items: list[dict]) -> float:
         return tools.get_directions(city, day_items)
 
     directions = state["cache"].get_or_compute(("get_directions", city, stop_ids), _lookup)
-    return duration + directions["travel_hours"]
+    return {"total": duration + directions["travel_hours"], "polyline": directions.get("polyline")}
 
 
 def _preference_counts(day_allocations: dict[str, list[dict]]) -> dict[str, int]:
@@ -174,6 +178,7 @@ def act(state: PlannerState) -> dict:
     observations = list(state["observations"])
     day_allocations = dict(state["day_allocations"])
     day_totals = dict(state["day_totals"])
+    day_polylines = dict(state["day_polylines"])
     over_time_days = list(state["over_time_days"])
     weather_notes = list(state["weather_notes"])
     consecutive_no_improvement = state["consecutive_no_improvement"]
@@ -197,12 +202,13 @@ def act(state: PlannerState) -> dict:
     elif tool == "initial_allocate_and_check":
         candidate_allocation = _initial_allocation(state)
         try:
-            candidate_totals = {day: _compute_day_total(state, items) for day, items in candidate_allocation.items()}
+            candidate_metrics = {day: _compute_day_metrics(state, items) for day, items in candidate_allocation.items()}
         except Exception as exc:  # a Directions failure here must not crash the run
             observations.append(_observe(tool, None, success=False, error=str(exc)))
         else:
             day_allocations = candidate_allocation
-            day_totals = candidate_totals
+            day_totals = {day: m["total"] for day, m in candidate_metrics.items()}
+            day_polylines = {day: m["polyline"] for day, m in candidate_metrics.items()}
             over_time_days = [d for d, t in day_totals.items() if t > TOURING_HOURS_PER_DAY]
             observations.append(_observe(tool, {"day_totals": day_totals, "over_time_days": over_time_days}))
 
@@ -223,13 +229,15 @@ def act(state: PlannerState) -> dict:
             else:
                 trimmed_items = [item for item in items if item is not candidate]
                 try:
-                    total = _compute_day_total(state, trimmed_items)
+                    metrics = _compute_day_metrics(state, trimmed_items)
                 except Exception as exc:  # a Directions failure must not crash the run either
                     consecutive_no_improvement += 1
                     observations.append(_observe(tool, None, success=False, error=str(exc)))
                 else:
+                    total = metrics["total"]
                     day_allocations[day] = trimmed_items
                     day_totals[day] = total
+                    day_polylines[day] = metrics["polyline"]
                     consecutive_no_improvement = 0 if total < before else consecutive_no_improvement + 1
                     observations.append(
                         _observe(tool, {"removed": candidate["name"], "day": day, "new_total": total})
@@ -240,6 +248,7 @@ def act(state: PlannerState) -> dict:
         "observations": observations,
         "day_allocations": day_allocations,
         "day_totals": day_totals,
+        "day_polylines": day_polylines,
         "over_time_days": over_time_days,
         "weather_notes": weather_notes,
         "consecutive_no_improvement": consecutive_no_improvement,
@@ -414,6 +423,7 @@ def run_planner(request: TripRequest) -> Iterator[dict]:
                         "status": current["status"],
                         "day_allocations": current.get("day_allocations"),
                         "day_totals": current.get("day_totals"),
+                        "day_polylines": current.get("day_polylines"),
                         "iteration": current["iteration"],
                     },
                 }
