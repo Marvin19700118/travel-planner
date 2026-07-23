@@ -1,0 +1,377 @@
+"""The ReAct planning loop: prepare (ungated) -> think -> act -> reflect ->
+route -> (loop back to think | one of three finalize nodes -> END).
+
+`think` decides what to do next and writes it to `actions`; `act` is the only
+place that calls the tools module; `reflect` writes a self-critique sentence;
+`route_after_reflect` is pure logic with no tool/LLM calls.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Iterator
+
+from langgraph.graph import END, StateGraph
+
+from . import tools
+from .state import PlannerState, day_key, new_state
+
+TOURING_HOURS_PER_DAY = 8.0
+
+
+# ---------------------------------------------------------------------------
+# Preparation phase (not counted against max_iterations)
+# ---------------------------------------------------------------------------
+
+
+def prepare(city: str, start_date: str, days: int, preferences: list[str]) -> PlannerState:
+    state = new_state(city, start_date, days, preferences)
+
+    coords = tools.geocode(city)
+    if coords is None:
+        state["status"] = "no_results"
+        state["final_report"] = f'Couldn\'t find "{city}" — please check the city name and try again.'
+        return state
+    state["lat"], state["lng"] = coords
+
+    candidates: dict[str, list[dict]] = {}
+    no_results: list[str] = []
+    for pref in preferences:
+        found = tools.search_places(city, pref)
+        candidates[pref] = found
+        if not found:
+            no_results.append(pref)
+    state["candidates"] = candidates
+    state["no_results_categories"] = no_results
+
+    if preferences and len(no_results) == len(preferences):
+        state["status"] = "no_results"
+        state["final_report"] = (
+            f'Couldn\'t find any places in "{city}" matching your selected preferences.'
+        )
+    return state
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by think/act/route
+# ---------------------------------------------------------------------------
+
+
+def _flatten_candidates(candidates: dict[str, list[dict]]) -> list[dict]:
+    flat: list[dict] = []
+    for pref, items in candidates.items():
+        for item in items:
+            flat.append({**item, "preference": pref})
+    return flat
+
+
+def _initial_allocation(state: PlannerState) -> dict[str, list[dict]]:
+    flat = _flatten_candidates(state["candidates"])
+    days = state["days"]
+    allocation: dict[str, list[dict]] = {day_key(i + 1): [] for i in range(days)}
+    for i, item in enumerate(flat):
+        allocation[day_key((i % days) + 1)].append(item)
+    return allocation
+
+
+def _compute_day_total(city: str, day_items: list[dict]) -> float:
+    duration = sum(item["duration_hr"] for item in day_items)
+    stop_ids = [item["id"] for item in day_items]
+    directions = tools.get_directions(city, stop_ids)
+    return duration + directions["travel_hours"]
+
+
+def _preference_counts(day_allocations: dict[str, list[dict]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for items in day_allocations.values():
+        for item in items:
+            counts[item["preference"]] = counts.get(item["preference"], 0) + 1
+    return counts
+
+
+def _find_trimmable(day_items: list[dict], counts: dict[str, int]) -> dict | None:
+    safe = [item for item in day_items if counts.get(item["preference"], 0) > 1]
+    if not safe:
+        return None
+    return max(safe, key=lambda item: item["duration_hr"])
+
+
+def _all_preferences_covered(state: PlannerState) -> bool:
+    counts = _preference_counts(state["day_allocations"])
+    return all(counts.get(pref, 0) > 0 for pref in state["preferences"])
+
+
+# ---------------------------------------------------------------------------
+# Graph nodes
+# ---------------------------------------------------------------------------
+
+
+def think(state: PlannerState) -> dict:
+    iteration = state["iteration"] + 1
+    thoughts = list(state["thoughts"])
+    actions = list(state["actions"])
+
+    if iteration == 1:
+        thought = "Let's check the weather for this trip before anything else."
+        action = {"tool": "get_weather", "input": {}}
+    elif iteration == 2:
+        thought = "Now let's lay out a first draft across all the days and see how the travel time adds up."
+        action = {"tool": "initial_allocate_and_check", "input": {}}
+    else:
+        over_time = state["over_time_days"]
+        if over_time:
+            worst_day = max(over_time, key=lambda d: state["day_totals"].get(d, 0.0))
+            counts = _preference_counts(state["day_allocations"])
+            candidate = _find_trimmable(state["day_allocations"].get(worst_day, []), counts)
+            if candidate:
+                thought = (
+                    f'{worst_day} is over budget. Let\'s drop "{candidate["name"]}", '
+                    "the least essential remaining stop, and recheck."
+                )
+            else:
+                thought = (
+                    f"{worst_day} is still over budget, but every remaining stop is the only "
+                    "representative of its preference — there's nothing safe left to trim."
+                )
+            action = {"tool": "trim_worst_day", "input": {"day": worst_day}}
+        else:
+            thought = (
+                "Every day fits, but not every preference is represented yet — "
+                "there's nothing further we can safely do."
+            )
+            action = {"tool": "trim_worst_day", "input": {"day": None}}
+
+    thoughts.append(thought)
+    actions.append(action)
+    return {"iteration": iteration, "thoughts": thoughts, "actions": actions}
+
+
+def act(state: PlannerState) -> dict:
+    action = state["actions"][-1]
+    tool = action["tool"]
+    observations = list(state["observations"])
+    day_allocations = dict(state["day_allocations"])
+    day_totals = dict(state["day_totals"])
+    over_time_days = list(state["over_time_days"])
+    weather_notes = list(state["weather_notes"])
+    consecutive_no_improvement = state["consecutive_no_improvement"]
+    trim_attempts = state["trim_attempts"]
+
+    if tool == "get_weather":
+        try:
+            results = tools.get_weather(state["city"], [state["start_date"]])
+            observations.append({"tool": tool, "result": results, "success": True, "error": None})
+            for r in results:
+                weather_notes.append(f"{r['date']}: {r['condition']}, {r['temp_c']}°C")
+        except Exception as exc:  # defensive: a tool failure must not crash the run
+            observations.append({"tool": tool, "result": None, "success": False, "error": str(exc)})
+
+    elif tool == "initial_allocate_and_check":
+        day_allocations = _initial_allocation(state)
+        over_time_days = []
+        for day, items in day_allocations.items():
+            total = _compute_day_total(state["city"], items)
+            day_totals[day] = total
+            if total > TOURING_HOURS_PER_DAY:
+                over_time_days.append(day)
+        observations.append(
+            {
+                "tool": tool,
+                "result": {"day_totals": day_totals, "over_time_days": over_time_days},
+                "success": True,
+                "error": None,
+            }
+        )
+
+    elif tool == "trim_worst_day":
+        day = action["input"].get("day")
+        if day is None:
+            observations.append({"tool": tool, "result": {"removed": None}, "success": True, "error": None})
+        else:
+            counts = _preference_counts(day_allocations)
+            items = list(day_allocations.get(day, []))
+            candidate = _find_trimmable(items, counts)
+            before = day_totals.get(day, 0.0)
+            trim_attempts += 1
+            if candidate:
+                items.remove(candidate)
+                day_allocations[day] = items
+                total = _compute_day_total(state["city"], items)
+                day_totals[day] = total
+                consecutive_no_improvement = 0 if total < before else consecutive_no_improvement + 1
+                observations.append(
+                    {
+                        "tool": tool,
+                        "result": {"removed": candidate["name"], "day": day, "new_total": total},
+                        "success": True,
+                        "error": None,
+                    }
+                )
+            else:
+                consecutive_no_improvement += 1
+                observations.append(
+                    {
+                        "tool": tool,
+                        "result": {"removed": None, "day": day, "reason": "no safe item to remove"},
+                        "success": True,
+                        "error": None,
+                    }
+                )
+            over_time_days = [d for d, t in day_totals.items() if t > TOURING_HOURS_PER_DAY]
+
+    return {
+        "observations": observations,
+        "day_allocations": day_allocations,
+        "day_totals": day_totals,
+        "over_time_days": over_time_days,
+        "weather_notes": weather_notes,
+        "consecutive_no_improvement": consecutive_no_improvement,
+        "trim_attempts": trim_attempts,
+    }
+
+
+def reflect(state: PlannerState) -> dict:
+    reflections = list(state["reflections"])
+    latest = state["observations"][-1] if state["observations"] else None
+
+    if latest is None:
+        reflections.append("Nothing to reflect on yet.")
+    elif latest["tool"] == "get_weather":
+        if latest["success"]:
+            reflections.append("Weather noted for reference; it won't change the schedule.")
+        else:
+            reflections.append("Couldn't get a forecast (likely outside the supported date range) — skipping it.")
+    elif latest["tool"] == "initial_allocate_and_check":
+        if state["over_time_days"]:
+            reflections.append(
+                f"Day(s) over budget: {', '.join(state['over_time_days'])}. Still not good enough — need to trim."
+            )
+        else:
+            reflections.append("Every day fits within the touring budget so far.")
+    elif latest["tool"] == "trim_worst_day":
+        result = latest["result"]
+        if result.get("removed"):
+            reflections.append(
+                f'Removed "{result["removed"]}" from {result["day"]}; new total is '
+                f'{result["new_total"]:.1f}h. Better, but let\'s check if it\'s enough.'
+            )
+        else:
+            reflections.append(
+                "Couldn't safely remove anything more without dropping a preference entirely. "
+                "Still not good enough."
+            )
+
+    return {"reflections": reflections}
+
+
+def route_after_reflect(state: PlannerState) -> str:
+    if not state["over_time_days"] and _all_preferences_covered(state):
+        return "finish"
+    if state["consecutive_no_improvement"] >= 2 and state["over_time_days"]:
+        return "infeasible"
+    if state["iteration"] >= state["max_iterations"]:
+        return "give_up"
+    return "continue"
+
+
+def finalize_finish(state: PlannerState) -> dict:
+    return {"status": "done", "final_report": "Your itinerary is ready."}
+
+
+def finalize_infeasible(state: PlannerState) -> dict:
+    parts = [
+        f"{d} is over by {state['day_totals'][d] - TOURING_HOURS_PER_DAY:.1f}h"
+        for d in state["over_time_days"]
+    ]
+    return {
+        "status": "infeasible",
+        "final_report": "This doesn't fit: " + "; ".join(parts) + ". Try removing a preference or adding a day.",
+    }
+
+
+def finalize_give_up(state: PlannerState) -> dict:
+    return {
+        "status": "failed_max_iterations",
+        "final_report": (
+            f"Hit the {state['max_iterations']}-iteration limit before finishing. "
+            "Here's what we have so far, and what's still unresolved."
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Graph assembly
+# ---------------------------------------------------------------------------
+
+
+def build_graph():
+    graph = StateGraph(PlannerState)
+    graph.add_node("think", think)
+    graph.add_node("act", act)
+    graph.add_node("reflect", reflect)
+    graph.add_node("finalize_finish", finalize_finish)
+    graph.add_node("finalize_infeasible", finalize_infeasible)
+    graph.add_node("finalize_give_up", finalize_give_up)
+
+    graph.set_entry_point("think")
+    graph.add_edge("think", "act")
+    graph.add_edge("act", "reflect")
+    graph.add_conditional_edges(
+        "reflect",
+        route_after_reflect,
+        {
+            "continue": "think",
+            "finish": "finalize_finish",
+            "infeasible": "finalize_infeasible",
+            "give_up": "finalize_give_up",
+        },
+    )
+    graph.add_edge("finalize_finish", END)
+    graph.add_edge("finalize_infeasible", END)
+    graph.add_edge("finalize_give_up", END)
+    return graph.compile()
+
+
+_EVENT_TYPES = {"think": "thought", "reflect": "reflection"}
+
+
+def run_planner(city: str, start_date: str, days: int, preferences: list[str]) -> Iterator[dict]:
+    """Yields one event dict per step. The last event is always type "final"."""
+    state = prepare(city, start_date, days, preferences)
+
+    if state["status"] == "no_results":
+        yield {"type": "status", "content": {"status": "no_results"}}
+        yield {"type": "final", "content": {"final_report": state["final_report"], "status": "no_results"}}
+        return
+
+    graph = build_graph()
+    current: dict[str, Any] = dict(state)
+    for update in graph.stream(state, stream_mode="updates", config={"recursion_limit": 100}):
+        for node_name, partial in update.items():
+            current.update(partial)
+            if node_name in _EVENT_TYPES:
+                key = "thoughts" if node_name == "think" else "reflections"
+                yield {
+                    "type": _EVENT_TYPES[node_name],
+                    "content": {"iteration": current["iteration"], "text": current[key][-1]},
+                }
+            elif node_name == "act":
+                yield {
+                    "type": "action",
+                    "content": {"iteration": current["iteration"], "action": current["actions"][-1]},
+                }
+                yield {
+                    "type": "observation",
+                    "content": {"iteration": current["iteration"], "observation": current["observations"][-1]},
+                }
+            elif node_name.startswith("finalize_"):
+                yield {"type": "status", "content": {"status": current["status"]}}
+                yield {
+                    "type": "final",
+                    "content": {
+                        "final_report": current["final_report"],
+                        "status": current["status"],
+                        "day_allocations": current.get("day_allocations"),
+                        "day_totals": current.get("day_totals"),
+                        "iteration": current["iteration"],
+                    },
+                }

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Travel Planner</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>Plan a trip</h1>
+
+    <form id="plan-form" class="card">
+      <label>
+        City / region
+        <input type="text" name="city" required placeholder="e.g. testville" />
+      </label>
+      <label>
+        Departure date
+        <input type="date" name="start_date" required />
+      </label>
+      <label>
+        Days
+        <input type="number" name="days" min="1" max="7" value="2" required />
+      </label>
+      <fieldset>
+        <legend>Preferences</legend>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="museum" /> Museums</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="nature" /> Nature scenery</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="food" /> Food</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="historic" /> Historic sites</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="shopping" /> Shopping</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="night_market" /> Night markets</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="hiking" /> Hiking</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="golf" /> Golf</label>
+      </fieldset>
+      <button type="submit">Plan my trip</button>
+    </form>
+
+    <section id="live-view" class="card hidden">
+      <h2>Watching the agent think…</h2>
+      <ol id="step-list"></ol>
+    </section>
+
+    <section id="result-view" class="card hidden">
+      <h2 id="result-title"></h2>
+      <p id="result-message"></p>
+      <div id="itinerary"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
