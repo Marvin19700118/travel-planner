@@ -1,0 +1,15 @@
+{
+  "hosting": {
+    "public": "static",
+    "ignore": ["firebase.json", "**/.*"],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "travel-planner-api",
+          "region": "us-central1"
+        }
+      }
+    ]
+  }
+}

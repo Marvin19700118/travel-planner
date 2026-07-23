@@ -6,11 +6,12 @@ import os
 import uuid
 from typing import AsyncIterator
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import auth
 import storage
 from agent.graph import run_planner
 from agent.state import TripRequest
@@ -20,6 +21,20 @@ app = FastAPI()
 _run_queues: dict[str, asyncio.Queue] = {}
 
 FRIENDLY_ERROR_MESSAGE = "Something unexpected happened while planning this trip. Please try again."
+
+
+@app.middleware("http")
+async def require_shared_secret(request: Request, call_next):
+    if request.url.path == auth.LOGIN_PATH or auth.is_authorized(request):
+        return await call_next(request)
+    if request.url.path.startswith("/api/"):
+        return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+    return auth.render_login_page()
+
+
+@app.post(auth.LOGIN_PATH)
+async def login(request: Request):
+    return await auth.handle_login(request)
 
 
 class PlanRequest(BaseModel):
