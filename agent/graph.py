@@ -13,7 +13,7 @@ from typing import Any, Iterator
 from langgraph.graph import END, StateGraph
 
 from . import tools
-from .state import PlannerState, day_key, new_state
+from .state import PlannerState, TripRequest, day_key, new_state
 
 TOURING_HOURS_PER_DAY = 8.0
 
@@ -23,30 +23,29 @@ TOURING_HOURS_PER_DAY = 8.0
 # ---------------------------------------------------------------------------
 
 
-def prepare(city: str, start_date: str, days: int, preferences: list[str]) -> PlannerState:
-    state = new_state(city, start_date, days, preferences)
+def prepare(request: TripRequest) -> PlannerState:
+    state = new_state(request)
 
-    coords = tools.geocode(city)
+    coords = tools.geocode(request.city)
     if coords is None:
         state["status"] = "no_results"
-        state["final_report"] = f'Couldn\'t find "{city}" — please check the city name and try again.'
+        state["final_report"] = f'Couldn\'t find "{request.city}" — please check the city name and try again.'
         return state
     state["lat"], state["lng"] = coords
 
     candidates: dict[str, list[dict]] = {}
     no_results: list[str] = []
-    for pref in preferences:
-        found = tools.search_places(city, pref)
+    for pref in request.preferences:
+        found = tools.search_places(request.city, pref)
         candidates[pref] = found
         if not found:
             no_results.append(pref)
     state["candidates"] = candidates
-    state["no_results_categories"] = no_results
 
-    if preferences and len(no_results) == len(preferences):
+    if request.preferences and len(no_results) == len(request.preferences):
         state["status"] = "no_results"
         state["final_report"] = (
-            f'Couldn\'t find any places in "{city}" matching your selected preferences.'
+            f'Couldn\'t find any places in "{request.city}" matching your selected preferences.'
         )
     return state
 
@@ -98,6 +97,10 @@ def _find_trimmable(day_items: list[dict], counts: dict[str, int]) -> dict | Non
 def _all_preferences_covered(state: PlannerState) -> bool:
     counts = _preference_counts(state["day_allocations"])
     return all(counts.get(pref, 0) > 0 for pref in state["preferences"])
+
+
+def _observe(tool: str, result: object, *, success: bool = True, error: str | None = None) -> dict:
+    return {"tool": tool, "result": result, "success": success, "error": error}
 
 
 # ---------------------------------------------------------------------------
@@ -154,16 +157,15 @@ def act(state: PlannerState) -> dict:
     over_time_days = list(state["over_time_days"])
     weather_notes = list(state["weather_notes"])
     consecutive_no_improvement = state["consecutive_no_improvement"]
-    trim_attempts = state["trim_attempts"]
 
     if tool == "get_weather":
         try:
             results = tools.get_weather(state["city"], [state["start_date"]])
-            observations.append({"tool": tool, "result": results, "success": True, "error": None})
+            observations.append(_observe(tool, results))
             for r in results:
                 weather_notes.append(f"{r['date']}: {r['condition']}, {r['temp_c']}°C")
         except Exception as exc:  # defensive: a tool failure must not crash the run
-            observations.append({"tool": tool, "result": None, "success": False, "error": str(exc)})
+            observations.append(_observe(tool, None, success=False, error=str(exc)))
 
     elif tool == "initial_allocate_and_check":
         day_allocations = _initial_allocation(state)
@@ -173,48 +175,28 @@ def act(state: PlannerState) -> dict:
             day_totals[day] = total
             if total > TOURING_HOURS_PER_DAY:
                 over_time_days.append(day)
-        observations.append(
-            {
-                "tool": tool,
-                "result": {"day_totals": day_totals, "over_time_days": over_time_days},
-                "success": True,
-                "error": None,
-            }
-        )
+        observations.append(_observe(tool, {"day_totals": day_totals, "over_time_days": over_time_days}))
 
     elif tool == "trim_worst_day":
         day = action["input"].get("day")
         if day is None:
-            observations.append({"tool": tool, "result": {"removed": None}, "success": True, "error": None})
+            observations.append(_observe(tool, {"removed": None}))
         else:
             counts = _preference_counts(day_allocations)
             items = list(day_allocations.get(day, []))
             candidate = _find_trimmable(items, counts)
             before = day_totals.get(day, 0.0)
-            trim_attempts += 1
             if candidate:
                 items.remove(candidate)
                 day_allocations[day] = items
                 total = _compute_day_total(state["city"], items)
                 day_totals[day] = total
                 consecutive_no_improvement = 0 if total < before else consecutive_no_improvement + 1
-                observations.append(
-                    {
-                        "tool": tool,
-                        "result": {"removed": candidate["name"], "day": day, "new_total": total},
-                        "success": True,
-                        "error": None,
-                    }
-                )
+                observations.append(_observe(tool, {"removed": candidate["name"], "day": day, "new_total": total}))
             else:
                 consecutive_no_improvement += 1
                 observations.append(
-                    {
-                        "tool": tool,
-                        "result": {"removed": None, "day": day, "reason": "no safe item to remove"},
-                        "success": True,
-                        "error": None,
-                    }
+                    _observe(tool, {"removed": None, "day": day, "reason": "no safe item to remove"})
                 )
             over_time_days = [d for d, t in day_totals.items() if t > TOURING_HOURS_PER_DAY]
 
@@ -225,7 +207,6 @@ def act(state: PlannerState) -> dict:
         "over_time_days": over_time_days,
         "weather_notes": weather_notes,
         "consecutive_no_improvement": consecutive_no_improvement,
-        "trim_attempts": trim_attempts,
     }
 
 
@@ -274,7 +255,10 @@ def route_after_reflect(state: PlannerState) -> str:
 
 
 def finalize_finish(state: PlannerState) -> dict:
-    return {"status": "done", "final_report": "Your itinerary is ready."}
+    report = "Your itinerary is ready."
+    if state["weather_notes"]:
+        report += " Weather for reference: " + "; ".join(state["weather_notes"]) + "."
+    return {"status": "done", "final_report": report}
 
 
 def finalize_infeasible(state: PlannerState) -> dict:
@@ -289,11 +273,23 @@ def finalize_infeasible(state: PlannerState) -> dict:
 
 
 def finalize_give_up(state: PlannerState) -> dict:
+    counts = _preference_counts(state["day_allocations"])
+    missing_preferences = [pref for pref in state["preferences"] if counts.get(pref, 0) == 0]
+    gaps = []
+    if state["over_time_days"]:
+        parts = [
+            f"{d} still over by {state['day_totals'][d] - TOURING_HOURS_PER_DAY:.1f}h"
+            for d in state["over_time_days"]
+        ]
+        gaps.append("; ".join(parts))
+    if missing_preferences:
+        gaps.append(f"no stop found yet for: {', '.join(missing_preferences)}")
+    gap_text = "; ".join(gaps) if gaps else "still checking whether the current plan fits"
     return {
         "status": "failed_max_iterations",
         "final_report": (
             f"Hit the {state['max_iterations']}-iteration limit before finishing. "
-            "Here's what we have so far, and what's still unresolved."
+            f"What's still unresolved: {gap_text}."
         ),
     }
 
@@ -334,9 +330,17 @@ def build_graph():
 _EVENT_TYPES = {"think": "thought", "reflect": "reflection"}
 
 
-def run_planner(city: str, start_date: str, days: int, preferences: list[str]) -> Iterator[dict]:
-    """Yields one event dict per step. The last event is always type "final"."""
-    state = prepare(city, start_date, days, preferences)
+def run_planner(request: TripRequest) -> Iterator[dict]:
+    """Yields one event dict per step. The last event is always type "final".
+
+    Attraction search happens inside `prepare()`, before this generator's
+    first event — deliberately not one of the 8 counted iterations, so
+    selecting many preferences can't eat the whole reasoning budget just
+    gathering candidates. The "preparing" event below exists so the live
+    view still shows activity during that phase rather than sitting blank.
+    """
+    yield {"type": "status", "content": {"status": "preparing"}}
+    state = prepare(request)
 
     if state["status"] == "no_results":
         yield {"type": "status", "content": {"status": "no_results"}}

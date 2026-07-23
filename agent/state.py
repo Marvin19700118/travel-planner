@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 Status = Literal["in_progress", "done", "infeasible", "no_results", "failed_max_iterations"]
+
+
+@dataclass(frozen=True)
+class TripRequest:
+    """The four inputs that describe a trip, bundled so they travel together
+    through prepare() / run_planner() instead of as four loose parameters."""
+
+    city: str
+    start_date: str
+    days: int
+    preferences: list[str]
 
 
 class PlannerState(TypedDict):
@@ -14,12 +26,10 @@ class PlannerState(TypedDict):
     lat: float | None
     lng: float | None
     candidates: dict[str, list[dict]]
-    no_results_categories: list[str]
 
     iteration: int
     max_iterations: int
     consecutive_no_improvement: int
-    trim_attempts: int
 
     thoughts: list[str]
     actions: list[dict]
@@ -36,20 +46,18 @@ class PlannerState(TypedDict):
     final_report: str | None
 
 
-def new_state(city: str, start_date: str, days: int, preferences: list[str]) -> PlannerState:
+def new_state(request: TripRequest) -> PlannerState:
     return PlannerState(
-        city=city,
-        start_date=start_date,
-        days=days,
-        preferences=list(preferences),
+        city=request.city,
+        start_date=request.start_date,
+        days=request.days,
+        preferences=list(request.preferences),
         lat=None,
         lng=None,
         candidates={},
-        no_results_categories=[],
         iteration=0,
         max_iterations=8,
         consecutive_no_improvement=0,
-        trim_attempts=0,
         thoughts=[],
         actions=[],
         observations=[],

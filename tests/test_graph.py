@@ -9,6 +9,11 @@ import os
 os.environ["TEST_MODE"] = "true"
 
 from agent.graph import run_planner  # noqa: E402
+from agent.state import TripRequest  # noqa: E402
+
+
+def _trip(city: str, days: int, preferences: list[str]) -> TripRequest:
+    return TripRequest(city=city, start_date="2026-08-01", days=days, preferences=preferences)
 
 
 def _final(events: list[dict]) -> dict:
@@ -18,7 +23,7 @@ def _final(events: list[dict]) -> dict:
 
 
 def test_satisfiable_request_reaches_done_within_iteration_cap():
-    events = list(run_planner("testville", "2026-08-01", 2, ["museum", "food"]))
+    events = list(run_planner(_trip("testville", 2, ["museum", "food"])))
     final = _final(events)
 
     assert final["status"] == "done"
@@ -31,10 +36,11 @@ def test_satisfiable_request_reaches_done_within_iteration_cap():
 
 
 def test_live_events_stream_before_the_final_outcome():
-    events = list(run_planner("testville", "2026-08-01", 2, ["museum", "food"]))
+    events = list(run_planner(_trip("testville", 2, ["museum", "food"])))
     kinds = [e["type"] for e in events]
 
-    assert kinds[0] == "thought"
+    assert kinds[0] == "status"  # "preparing", emitted before candidate search even starts
+    assert kinds.index("thought") < kinds.index("final")
     assert "action" in kinds
     assert "observation" in kinds
     assert "reflection" in kinds
@@ -43,7 +49,7 @@ def test_live_events_stream_before_the_final_outcome():
 
 
 def test_unfittable_preferences_reach_infeasible_with_specific_day_named():
-    events = list(run_planner("sprawlville", "2026-08-01", 1, ["hiking", "golf"]))
+    events = list(run_planner(_trip("sprawlville", 1, ["hiking", "golf"])))
     final = _final(events)
 
     assert final["status"] == "infeasible"
@@ -53,7 +59,7 @@ def test_unfittable_preferences_reach_infeasible_with_specific_day_named():
 
 
 def test_no_matching_places_reaches_no_results():
-    events = list(run_planner("emptyville", "2026-08-01", 1, ["museum"]))
+    events = list(run_planner(_trip("emptyville", 1, ["museum"])))
     final = _final(events)
 
     assert final["status"] == "no_results"
@@ -61,7 +67,7 @@ def test_no_matching_places_reaches_no_results():
 
 
 def test_unrecognized_city_reaches_no_results():
-    events = list(run_planner("nowhereville", "2026-08-01", 1, ["museum"]))
+    events = list(run_planner(_trip("nowhereville", 1, ["museum"])))
     final = _final(events)
 
     assert final["status"] == "no_results"
@@ -69,11 +75,12 @@ def test_unrecognized_city_reaches_no_results():
 
 
 def test_never_satisfied_plan_stops_at_exactly_the_iteration_cap():
-    events = list(run_planner("loopville", "2026-08-01", 1, ["food"]))
+    events = list(run_planner(_trip("loopville", 1, ["food"])))
     final = _final(events)
 
     assert final["status"] == "failed_max_iterations"
     assert final["iteration"] == 8
+    assert "unresolved" in final["final_report"]
 
     thought_iterations = [e["content"]["iteration"] for e in events if e["type"] == "thought"]
     assert max(thought_iterations) == 8
@@ -81,8 +88,23 @@ def test_never_satisfied_plan_stops_at_exactly_the_iteration_cap():
 
 
 def test_no_results_short_circuits_before_the_main_loop():
-    events = list(run_planner("emptyville", "2026-08-01", 1, ["museum"]))
+    events = list(run_planner(_trip("emptyville", 1, ["museum"])))
 
     assert not any(e["type"] == "thought" for e in events), (
         "no_results from the preparation phase should never enter the think/act/reflect loop"
     )
+
+
+def test_done_report_surfaces_weather_reference_note():
+    events = list(run_planner(_trip("testville", 2, ["museum", "food"])))
+    final = _final(events)
+
+    assert "Weather" in final["final_report"]
+
+
+def test_give_up_report_names_the_specific_gap():
+    events = list(run_planner(_trip("loopville", 1, ["food"])))
+    final = _final(events)
+
+    assert "day1" in final["final_report"]
+    assert "over by" in final["final_report"]

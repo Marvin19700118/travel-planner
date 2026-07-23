@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 import storage
 from agent.graph import run_planner
+from agent.state import TripRequest
 
 app = FastAPI()
 
@@ -40,8 +41,11 @@ def execute_run(run_id: str, request: PlanRequest, queue: asyncio.Queue, loop: a
         events.append(event)
         loop.call_soon_threadsafe(queue.put_nowait, event)
 
+    trip = TripRequest(
+        city=request.city, start_date=request.start_date, days=request.days, preferences=request.preferences
+    )
     try:
-        for event in run_planner(request.city, request.start_date, request.days, request.preferences):
+        for event in run_planner(trip):
             emit(event)
     except Exception:
         emit({"type": "error", "content": {"message": FRIENDLY_ERROR_MESSAGE}})
@@ -91,11 +95,6 @@ async def replay_plan(run_id: str) -> dict:
     if record is None:
         raise HTTPException(status_code=404, detail="Unknown run_id")
     return record
-
-
-@app.get("/api/runs")
-async def list_runs() -> list[dict]:
-    return storage.list_runs()
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
