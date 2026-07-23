@@ -39,37 +39,37 @@ def _generate(prompt: str) -> str | None:
     return text or None
 
 
-def narrate_thought(context: str, fallback: str) -> str:
-    """Returns Gemini's one-sentence narration of what the agent is about to
-    do, or `fallback` if no key is configured or the call fails for any
-    reason — narration is a presentation detail, never worth failing a run over.
-    """
+def _narrate(prompt: str, fallback: str) -> str:
+    """Shared by narrate_thought/narrate_reflection: no key, no response, or
+    any failure at all falls back — narration is a presentation detail,
+    never worth failing a run over."""
     if not is_available():
         return fallback
     try:
-        text = _generate(
-            "You are a trip-planning agent narrating your own next step in one short, "
-            "friendly sentence, present tense, first person plural (e.g. \"Let's...\"). "
-            f"What's about to happen: {context}\n"
-            "Reply with exactly one sentence, no preamble."
-        )
-        return text or fallback
+        return _generate(prompt) or fallback
     except Exception:
         return fallback
+
+
+def narrate_thought(context: str, fallback: str) -> str:
+    """Returns Gemini's one-sentence narration of what the agent is about to
+    do, or `fallback` if no key is configured or the call fails for any reason."""
+    return _narrate(
+        "You are a trip-planning agent narrating your own next step in one short, "
+        "friendly sentence, present tense, first person plural (e.g. \"Let's...\"). "
+        f"What's about to happen: {context}\n"
+        "Reply with exactly one sentence, no preamble.",
+        fallback,
+    )
 
 
 def narrate_reflection(context: str, fallback: str) -> str:
     """Returns Gemini's one-sentence self-critique of what just happened, or
     `fallback` under the same conditions as narrate_thought."""
-    if not is_available():
-        return fallback
-    try:
-        text = _generate(
-            "You are a trip-planning agent giving a one-sentence, honest self-critique of "
-            "what just happened, casual tone. "
-            f"What just happened: {context}\n"
-            "Reply with exactly one sentence, no preamble."
-        )
-        return text or fallback
-    except Exception:
-        return fallback
+    return _narrate(
+        "You are a trip-planning agent giving a one-sentence, honest self-critique of "
+        "what just happened, casual tone. "
+        f"What just happened: {context}\n"
+        "Reply with exactly one sentence, no preamble.",
+        fallback,
+    )

@@ -83,13 +83,43 @@ def test_invalid_request_is_rejected_before_a_run_starts(client):
     assert response.status_code == 422
 
 
-def test_unexpected_exception_during_a_run_ends_gracefully_not_with_a_crash(tmp_path, monkeypatch):
+def test_a_persistent_tool_failure_degrades_to_a_terminal_state_not_a_crash(tmp_path, monkeypatch):
+    """A Directions failure is an anticipated tool failure, not a bug — the
+    graph itself should absorb it (see agent/graph.py's act()) and reach a
+    normal terminal state, rather than falling through to main.py's
+    last-resort catch-all."""
     monkeypatch.setattr(main.storage, "RUN_LOG_DIR", tmp_path / "run_logs")
 
     def boom(*args, **kwargs):
-        raise RuntimeError("simulated tool failure")
+        raise RuntimeError("simulated Directions API failure")
 
     monkeypatch.setattr("agent.graph.tools.get_directions", boom)
+
+    with TestClient(main.app) as client:
+        run_id = client.post(
+            "/api/plan",
+            json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+        ).json()["run_id"]
+
+        events = _collect_sse_events(client, run_id)
+
+    assert events[-1]["type"] == "final"
+    assert events[-1]["content"]["status"] == "failed_max_iterations"
+    assert events[-1]["content"]["final_report"] != main.FRIENDLY_ERROR_MESSAGE
+    assert not any(e["type"] == "error" for e in events)
+
+
+def test_a_truly_unexpected_exception_during_a_run_ends_gracefully_not_with_a_crash(tmp_path, monkeypatch):
+    """Simulates a genuine bug in the reasoning logic itself (not an
+    anticipated tool failure) to confirm main.py's last-resort catch-all
+    still turns it into a friendly terminal event instead of a hung
+    connection or an unhandled exception."""
+    monkeypatch.setattr(main.storage, "RUN_LOG_DIR", tmp_path / "run_logs")
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("simulated bug in the reasoning logic")
+
+    monkeypatch.setattr("agent.graph.think", boom)
 
     with TestClient(main.app) as client:
         run_id = client.post(

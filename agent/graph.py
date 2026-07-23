@@ -195,14 +195,16 @@ def act(state: PlannerState) -> dict:
             observations.append(_observe(tool, None, success=False, error=str(exc)))
 
     elif tool == "initial_allocate_and_check":
-        day_allocations = _initial_allocation(state)
-        over_time_days = []
-        for day, items in day_allocations.items():
-            total = _compute_day_total(state, items)
-            day_totals[day] = total
-            if total > TOURING_HOURS_PER_DAY:
-                over_time_days.append(day)
-        observations.append(_observe(tool, {"day_totals": day_totals, "over_time_days": over_time_days}))
+        candidate_allocation = _initial_allocation(state)
+        try:
+            candidate_totals = {day: _compute_day_total(state, items) for day, items in candidate_allocation.items()}
+        except Exception as exc:  # a Directions failure here must not crash the run
+            observations.append(_observe(tool, None, success=False, error=str(exc)))
+        else:
+            day_allocations = candidate_allocation
+            day_totals = candidate_totals
+            over_time_days = [d for d, t in day_totals.items() if t > TOURING_HOURS_PER_DAY]
+            observations.append(_observe(tool, {"day_totals": day_totals, "over_time_days": over_time_days}))
 
     elif tool == "trim_worst_day":
         day = action["input"].get("day")
@@ -213,18 +215,25 @@ def act(state: PlannerState) -> dict:
             items = list(day_allocations.get(day, []))
             candidate = _find_trimmable(items, counts)
             before = day_totals.get(day, 0.0)
-            if candidate:
-                items.remove(candidate)
-                day_allocations[day] = items
-                total = _compute_day_total(state, items)
-                day_totals[day] = total
-                consecutive_no_improvement = 0 if total < before else consecutive_no_improvement + 1
-                observations.append(_observe(tool, {"removed": candidate["name"], "day": day, "new_total": total}))
-            else:
+            if candidate is None:
                 consecutive_no_improvement += 1
                 observations.append(
                     _observe(tool, {"removed": None, "day": day, "reason": "no safe item to remove"})
                 )
+            else:
+                trimmed_items = [item for item in items if item is not candidate]
+                try:
+                    total = _compute_day_total(state, trimmed_items)
+                except Exception as exc:  # a Directions failure must not crash the run either
+                    consecutive_no_improvement += 1
+                    observations.append(_observe(tool, None, success=False, error=str(exc)))
+                else:
+                    day_allocations[day] = trimmed_items
+                    day_totals[day] = total
+                    consecutive_no_improvement = 0 if total < before else consecutive_no_improvement + 1
+                    observations.append(
+                        _observe(tool, {"removed": candidate["name"], "day": day, "new_total": total})
+                    )
             over_time_days = [d for d, t in day_totals.items() if t > TOURING_HOURS_PER_DAY]
 
     return {
