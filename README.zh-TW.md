@@ -22,7 +22,8 @@ python -m venv .venv
 | `TEST_MODE` | 一定需要 | `true` 時完全跑假資料（不需要網路、不需要金鑰）；`false` 時呼叫真實 Google API |
 | `GOOGLE_MAPS_API_KEY` | `TEST_MODE=false` 時 | 需要在同一個 Google Cloud 專案上啟用 Geocoding API、Places API (New)、Directions API、Weather API |
 | `GEMINI_API_KEY` | 選填，僅在 `TEST_MODE=false` 時使用 | 若未設定，Thought/Reflection 文字會退回 `TEST_MODE` 使用的同一套固定字串，AI 封面插畫也會改用真實景點照片代替 —— 就算沒有這個金鑰，只要有真實的景點/天氣/路線資料，整個 app 仍然完全可用 |
-| `GOOGLE_MAPS_JS_API_KEY` | 要顯示互動地圖，或匯出頁的每日靜態地圖時 | 刻意與 `GOOGLE_MAPS_API_KEY` **分開**的另一個金鑰 —— 這個會暴露在瀏覽器端。需要在這個金鑰上**同時**允許 Maps JavaScript API（互動地圖，ticket #4）**與** Maps Static API（每日匯出地圖，ticket #8），並在 Cloud Console 設定 HTTP 參照網址限制，才能安全用在正式環境（本機開發不受影響）。若未設定，地圖區域會顯示「地圖尚未在此部署設定。」而不是一片空白；若已設定但缺少某個 API 的授權，那個地圖會退回同樣的文字提示，而不是顯示壞掉的圖片 —— 詳見下方 #8 的即時驗證紀錄 |
+| `GOOGLE_MAPS_JS_API_KEY` | 要顯示互動地圖時 | 刻意與 `GOOGLE_MAPS_API_KEY` **分開**的另一個金鑰 —— 這個會暴露在瀏覽器端，需要啟用 Maps JavaScript API，並在 Cloud Console 設定 HTTP 參照網址限制，才能安全用在正式環境（本機開發不受影響）。若未設定，地圖區域會顯示「地圖尚未在此部署設定。」而不是一片空白 |
+| `GOOGLE_MAPS_STATIC_API_KEY` | 要顯示匯出頁的每日靜態地圖時 | **2026-07-24 即時修正**：原本這個功能是跟 `GOOGLE_MAPS_JS_API_KEY` 共用同一個金鑰，想法是一個瀏覽器端金鑰可以同時涵蓋 Maps JavaScript API 和 Maps Static API。結果在實際上線測試時失敗了 —— 一個只限制給 Maps JavaScript API 用的金鑰，打 Static Maps 的請求會被回 403。所以現在改成獨立的環境變數，讓每個金鑰都只限制在它真正需要的那一個 API 上。跟 `GOOGLE_MAPS_JS_API_KEY` 一樣需要注意瀏覽器暴露與參照網址限制的規則。若未設定，或請求因任何原因失敗，每一天的地圖都會退回跟「地圖尚未設定」一樣的文字提示，而不是顯示壞掉的圖片（`static/export.js` 的 `<img onerror>` 處理邏輯）|
 | `SHARED_SECRET` | 要求使用者輸入密碼才能使用這個 app 時 | 選用，跟其他設定一樣：不設定就是開放存取（本機開發、現有測試都不需要改動）。部署到任何公開環境前務必設定 —— 詳見下方「部署」一節 |
 
 **已於 2026-07-24 用真實金鑰做過即時驗證**，包含透過部署後的 app 完整跑過一次真實的行程規劃（台北）—— 實際的上線網址與部署時發現的問題請見下方「部署」一節：
@@ -30,8 +31,8 @@ python -m venv .venv
 - `agent/tools.py` 的 `search_places` 現在把結果數上限設為 `_MAX_RESULTS_PER_CATEGORY = 5`（透過 Places API 的 `pageSize`）—— 這是即時驗證時發現的真實 bug：Text Search 預設每次查詢最多回傳 20 筆結果，而 `agent/graph.py` 的刪減迴圈（只針對小型假資料開發與測試過，每次迭代只刪一項，上限 8 次迭代）在面對兩個偏好產生的 30～40 筆真實候選地點時，完全沒辦法收斂。加上這個上限之前，每次真實執行都會以 `failed_max_iterations` 失敗收場。
 - 第一次即時測試時，`weather.googleapis.com` 回傳 `403 PERMISSION_DENIED` / `API_KEY_SERVICE_BLOCKED` —— Weather API 已經在 GCP 專案上啟用，但這個金鑰在 Cloud Console 的 API 限制清單裡沒有列入。這不會導致整個流程失敗（天氣只是參考資訊，而且本來就有優雅降級的設計 —— 見 `agent/graph.py` 的 `act()` 對 Directions 失敗的處理），但要把 Weather API 加進金鑰的允許清單才能真的看到天氣預報。
 - `agent/llm.py` 的 Gemini 整合使用 `google-genai` SDK。`gemini-2.0-flash` 和 `gemini-2.0-flash-preview-image-generation` 兩個模型其實都已經停用（回傳 `404 NOT_FOUND`，訊息是「no longer available」，即使 `models.list()` 裡仍然列得出來）—— 已改用 `gemini-3.1-flash-lite` / `gemini-3.1-flash-image`（依維護者偏好選用 3.1 系列），兩者都已在真實部署中端到端驗證成功，包含產生出一筆真實的已儲存行程，附上真實景點照片與真實 AI 封面插畫。
-- 地圖（`static/app.js`）部署前用一個佔位金鑰驗證過：日期分頁籤、標記／路線繪製邏輯、腳本載入都正常運作。尚未針對部署後真正使用的 `GOOGLE_MAPS_JS_API_KEY` 在瀏覽器裡重新驗證過（只用 `curl` 確認過這個金鑰本身對 Maps JavaScript API 是有效的）——值得花點時間用瀏覽器實際檢查一次。另外，`google.maps.Marker` 在上游已被標示為棄用，建議改用 `AdvancedMarkerElement`；這裡先維持原樣，因為要遷移需要從 Cloud Console 另外申請一個 Map ID（又是一個新的設定步驟），而且 `Marker` 目前仍完全受支援，官方也還沒公告停止支援的時間。
-- **#8 的 Static Maps API**：即時測試時，部署所用的 `GOOGLE_MAPS_JS_API_KEY` 回傳了 `403`（「This API key is not authorized to use this service or API」）—— 跟上面 Weather 金鑰限制屬於同一類問題，只是換了另一組金鑰／API。因應這個狀況強化了 `static/export.js`：靜態地圖圖片載入失敗時（`<img onerror>`）現在會換成跟「地圖尚未設定」一樣的文字提示，而不是在列印頁面留下一張壞圖示，所以這裡會優雅降級而不是顯得像壞掉一樣 —— 但要在 Cloud Console 把 Maps Static API 加進這個金鑰的允許清單，才能在匯出頁看到真正的每日路線地圖。
+- 地圖（`static/app.js`）部署前用一個佔位金鑰驗證過：日期分頁籤、標記／路線繪製邏輯、腳本載入都正常運作。第一個真正部署上線的 `GOOGLE_MAPS_JS_API_KEY` 在瀏覽器裡實際測試時仍然失敗（跳出 Google 自己的錯誤畫面），即使用 `curl` 打 `/maps/api/js` 這個啟動腳本網址永遠都回 200 —— 真正的金鑰／參照網址檢查是在腳本的執行階段、真正在瀏覽器裡初始化地圖時才會發生，`curl` 沒辦法模擬這個過程。後來換成另一個只限制給 Maps JavaScript API 用的金鑰，確認可以正常運作。另外，`google.maps.Marker` 在上游已被標示為棄用，建議改用 `AdvancedMarkerElement`；這裡先維持原樣，因為要遷移需要從 Cloud Console 另外申請一個 Map ID（又是一個新的設定步驟），而且 `Marker` 目前仍完全受支援，官方也還沒公告停止支援的時間。
+- **#8 的 Static Maps API**：即時測試時，第一個部署所用的金鑰回傳了 `403`（「This API key is not authorized to use this service or API」）—— 跟上面 Weather 金鑰限制屬於同一類問題，只是換了另一組金鑰／API。因應這個狀況強化了 `static/export.js`：靜態地圖圖片載入失敗時（`<img onerror>`）現在會換成跟「地圖尚未設定」一樣的文字提示，而不是在列印頁面留下一張壞圖示，所以這裡會優雅降級而不是顯得像壞掉一樣。後來發現這其實是架構上的問題，不只是少勾一個選項：一個限制給 Maps JavaScript API 用的瀏覽器端金鑰，沒辦法同時再授權給 Maps Static API，除非放寬這個金鑰的限制範圍 —— 所以把 `GOOGLE_MAPS_STATIC_API_KEY` 拆成獨立的環境變數（見上方表格），每個金鑰各自只限制在它真正需要的那一個 API。已用一個專用的 Static Maps 金鑰確認可以正常運作。
 
 ## 本機執行
 
@@ -87,7 +88,7 @@ gcloud run deploy travel-planner-api \
     --max-instances=1 \
     --min-instances=0 \
     --allow-unauthenticated \
-    --set-env-vars TEST_MODE=false,SHARED_SECRET=your-password,GOOGLE_MAPS_JS_API_KEY=your-js-key \
+    --set-env-vars TEST_MODE=false,SHARED_SECRET=your-password,GOOGLE_MAPS_JS_API_KEY=your-js-key,GOOGLE_MAPS_STATIC_API_KEY=your-static-maps-key \
     --set-secrets GOOGLE_MAPS_API_KEY=google-maps-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest
 
 # 接著部署 Hosting（firebase.json 裡的 serviceId/region 必須跟上面
@@ -99,9 +100,9 @@ firebase deploy --only hosting
 
 **`--allow-unauthenticated` 是必要的，不是可省略的選項**：Cloud Run 預設會用 IAM 擋掉每個請求，*在*請求抵達這個 app 自己的 `auth.py` 密碼 middleware *之前*就先擋掉了。沒有這個參數，任何人都無法連上這個 app —— 就算輸入了正確的 `SHARED_SECRET` 也不行 —— 因為 Cloud Run 自己的關卡會先回 403。這個 app 真正的存取控制是 `SHARED_SECRET`；`--allow-unauthenticated` 只是讓請求能通過，走到真正做檢查的地方。
 
-**`GOOGLE_MAPS_JS_API_KEY` 一定要放在 `--set-env-vars` 裡** —— 這點很容易漏掉，因為它看起來應該跟另外兩個走 Secret Manager 的金鑰放在一起，但 `/api/config` 是直接從環境變數讀取它；漏掉的話會悄悄地回傳一個空字串，地圖在部署後的網站上完全不會顯示。
+**`GOOGLE_MAPS_JS_API_KEY` 和 `GOOGLE_MAPS_STATIC_API_KEY` 兩個都一定要放在 `--set-env-vars` 裡** —— 這點很容易漏掉，因為它們看起來應該跟另外兩個走 Secret Manager 的金鑰放在一起，但 `/api/config` 是直接從環境變數讀取它們；漏掉任何一個都會悄悄地回傳一個空字串，對應的那個地圖在部署後的網站上完全不會顯示。
 
-`GOOGLE_MAPS_API_KEY` 和 `GEMINI_API_KEY` 建議優先用 Secret Manager（`--set-secrets`）而不是 `--set-env-vars` —— 它們是真正的憑證。`GOOGLE_MAPS_JS_API_KEY` 是唯一的例外：它本來就打算讓瀏覽器看到，所以用一般環境變數沒問題，但部署前務必在 Cloud Console 用 HTTP 參照網址限制它（最好也限制只能用在 Maps JavaScript API）到 Hosting 的網域 —— 沒有限制的金鑰一旦被從網頁原始碼中取走，就能被拿去對任何它被允許呼叫的 API 亂用，累積用量費用。
+`GOOGLE_MAPS_API_KEY` 和 `GEMINI_API_KEY` 建議優先用 Secret Manager（`--set-secrets`）而不是 `--set-env-vars` —— 它們是真正的憑證。`GOOGLE_MAPS_JS_API_KEY` 和 `GOOGLE_MAPS_STATIC_API_KEY` 是例外：兩個都本來就打算讓瀏覽器看到，所以用一般環境變數沒問題，但部署前務必在 Cloud Console 用 HTTP 參照網址限制到 Hosting 的網域，並各自限制只能用在它真正需要的那一個 API（分別是 Maps JavaScript API／Maps Static API）—— 沒有限制的金鑰一旦被從網頁原始碼中取走，就能被拿去對任何它被允許呼叫的 API 亂用，累積用量費用；而這次上線測試也發現，一個金鑰想同時涵蓋兩個 API，實際上比拆成兩個各自窄範圍限制的金鑰更容易出問題。
 
 **延後到這次首次部署之後才處理的事項**（不影響已完成的其他功能）：
 - `storage.py` 目前仍是本機 JSONL 檔案，還不是 Firestore。Cloud Run 的檔案系統是暫時性的，所以在換成 Firestore 之前，重新部署或冷啟動都會讓執行紀錄消失。所有呼叫端都已經統一透過 `storage.save_run`／`load_run`／`list_runs`，所以換成 `google-cloud-firestore` 應該只需要改這一個檔案 —— 只是在沒有真正的 Firestore 實例可用時，沒辦法真的動手做並驗證（本機也沒有模擬器可用：Firebase CLI 需要 Java 執行環境，這裡也沒裝）。

@@ -150,14 +150,22 @@ async def replay_plan(run_id: str) -> dict:
 
 @app.get("/api/config")
 async def get_config() -> dict:
-    """Client-safe config only. GOOGLE_MAPS_JS_API_KEY is deliberately a
-    separate key from GOOGLE_MAPS_API_KEY (used server-side for Geocoding/
-    Places/Directions/Weather) — this one is meant to be visible in the
-    browser and should be restricted by HTTP referrer in the Cloud Console.
-    An empty string means the map isn't configured yet; the frontend should
-    degrade to a "map unavailable" state rather than trying to load it.
+    """Client-safe config only. GOOGLE_MAPS_JS_API_KEY and
+    GOOGLE_MAPS_STATIC_API_KEY are deliberately separate from
+    GOOGLE_MAPS_API_KEY (used server-side for Geocoding/Places/Directions/
+    Weather) — these are meant to be visible in the browser and should be
+    restricted by HTTP referrer in the Cloud Console. They're also
+    deliberately separate from *each other*: Maps JavaScript API (the
+    interactive map, ticket #4) and Maps Static API (the export page's
+    per-day maps, ticket #8) can be restricted to their own key each,
+    tighter than one key allowed for both. An empty string means that
+    particular map isn't configured yet; the frontend should degrade to a
+    "map unavailable" state rather than trying to load it.
     """
-    return {"mapsApiKey": os.environ.get("GOOGLE_MAPS_JS_API_KEY", "")}
+    return {
+        "mapsApiKey": os.environ.get("GOOGLE_MAPS_JS_API_KEY", ""),
+        "staticMapsApiKey": os.environ.get("GOOGLE_MAPS_STATIC_API_KEY", ""),
+    }
 
 
 @app.get("/api/trips")

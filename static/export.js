@@ -98,16 +98,18 @@ function showError(message) {
   exportError.classList.remove("hidden");
 }
 
-async function loadMapsApiKey() {
+async function loadStaticMapsApiKey() {
   // A failed /api/config fetch should only disable the map, never the rest
   // of the page (cover, itinerary, thumbnails don't depend on it) --
   // matches the resilience pattern already established in viewer.js's
-  // loadMapsConfig.
+  // loadMapsConfig. Deliberately reads staticMapsApiKey, not mapsApiKey --
+  // Maps Static API and Maps JavaScript API can be restricted to separate
+  // keys (live-confirmed necessary: the JS-only key 403'd on Static Maps).
   try {
     const response = await fetch("/api/config");
     if (!response.ok) return null;
     const config = await response.json();
-    return config.mapsApiKey || null;
+    return config.staticMapsApiKey || null;
   } catch {
     return null;
   }
@@ -128,7 +130,7 @@ async function loadExport(tripId) {
   }
 
   const trip = await tripResponse.json();
-  const mapsApiKey = await loadMapsApiKey();
+  const mapsApiKey = await loadStaticMapsApiKey();
 
   exportCover.src = trip.cover_image_url || "/icon-512.png";
   exportCover.alt = `${trip.city} 封面圖`;

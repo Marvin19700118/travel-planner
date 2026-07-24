@@ -28,14 +28,22 @@ def _collect_sse_events(client: TestClient, run_id: str) -> list[dict]:
     return events
 
 
-def test_config_reports_empty_maps_key_when_unset(client, monkeypatch):
+def test_config_reports_empty_keys_when_unset(client, monkeypatch):
     monkeypatch.delenv("GOOGLE_MAPS_JS_API_KEY", raising=False)
-    assert client.get("/api/config").json() == {"mapsApiKey": ""}
+    monkeypatch.delenv("GOOGLE_MAPS_STATIC_API_KEY", raising=False)
+    assert client.get("/api/config").json() == {"mapsApiKey": "", "staticMapsApiKey": ""}
 
 
-def test_config_reports_the_maps_key_when_set(client, monkeypatch):
+def test_config_reports_the_maps_keys_when_set(client, monkeypatch):
     monkeypatch.setenv("GOOGLE_MAPS_JS_API_KEY", "browser-key")
-    assert client.get("/api/config").json() == {"mapsApiKey": "browser-key"}
+    monkeypatch.setenv("GOOGLE_MAPS_STATIC_API_KEY", "static-key")
+    assert client.get("/api/config").json() == {"mapsApiKey": "browser-key", "staticMapsApiKey": "static-key"}
+
+
+def test_config_keys_are_independent_of_each_other(client, monkeypatch):
+    monkeypatch.setenv("GOOGLE_MAPS_JS_API_KEY", "browser-key")
+    monkeypatch.delenv("GOOGLE_MAPS_STATIC_API_KEY", raising=False)
+    assert client.get("/api/config").json() == {"mapsApiKey": "browser-key", "staticMapsApiKey": ""}
 
 
 def test_start_plan_returns_a_run_id(client):
