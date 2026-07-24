@@ -2,10 +2,6 @@ const tripsList = document.getElementById("trips-list");
 const tripsEmpty = document.getElementById("trips-empty");
 const tripsError = document.getElementById("trips-error");
 
-function dayCountLabel(days) {
-  return `${days} day${days === 1 ? "" : "s"}`;
-}
-
 function renderTripCard(trip) {
   const card = document.createElement("div");
   card.className = "trip-card";

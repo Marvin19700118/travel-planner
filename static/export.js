@@ -13,10 +13,6 @@ const STATIC_MAP_SIZE = "600x300";
 // past 9 would silently misrender; day sizes in practice never get close.
 const MARKER_LABELS = "123456789";
 
-function dayCountLabel(days) {
-  return `${days} day${days === 1 ? "" : "s"}`;
-}
-
 function buildStaticMapUrl(stops, polyline, mapsApiKey) {
   const params = new URLSearchParams();
   params.set("size", STATIC_MAP_SIZE);
@@ -102,11 +98,25 @@ function showError(message) {
   exportError.classList.remove("hidden");
 }
 
+async function loadMapsApiKey() {
+  // A failed /api/config fetch should only disable the map, never the rest
+  // of the page (cover, itinerary, thumbnails don't depend on it) --
+  // matches the resilience pattern already established in viewer.js's
+  // loadMapsConfig.
+  try {
+    const response = await fetch("/api/config");
+    if (!response.ok) return null;
+    const config = await response.json();
+    return config.mapsApiKey || null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadExport(tripId) {
   let tripResponse;
-  let configResponse;
   try {
-    [tripResponse, configResponse] = await Promise.all([fetch(`/api/trips/${tripId}`), fetch("/api/config")]);
+    tripResponse = await fetch(`/api/trips/${tripId}`);
   } catch {
     showError("Couldn't load this trip — check your connection and try again.");
     return;
@@ -118,8 +128,7 @@ async function loadExport(tripId) {
   }
 
   const trip = await tripResponse.json();
-  const config = configResponse.ok ? await configResponse.json() : {};
-  const mapsApiKey = config.mapsApiKey || null;
+  const mapsApiKey = await loadMapsApiKey();
 
   exportCover.src = trip.cover_image_url || "/icon-512.png";
   exportCover.alt = `${trip.city} cover`;
