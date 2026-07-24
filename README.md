@@ -62,7 +62,7 @@ In `TEST_MODE=true`, try these city names in the form to exercise each terminal 
 
 **Why `firebase.json` routes every path to Cloud Run** (`"source": "**"`, not just `/api/**`): the shared-password gate in `auth.py` is FastAPI middleware — it only runs for requests that actually reach the FastAPI app. If Firebase Hosting served `static/` directly (the more common Hosting+Cloud Run split), the password gate would never see those requests and the UI would be reachable without a password, failing this ticket's "blocks access to both the UI and the API" requirement. Routing everything to Cloud Run means Hosting is just a CDN/HTTPS front door; the `"public": "static"` directory is required by Firebase but effectively unused since the catch-all rewrite wins first.
 
-First-deploy steps (none of this has been run):
+First-deploy steps:
 
 ```bash
 gcloud auth login
@@ -82,16 +82,21 @@ gcloud run deploy travel-planner-api \
     --region us-central1 \
     --max-instances=1 \
     --min-instances=0 \
-    --set-env-vars TEST_MODE=false,SHARED_SECRET=your-password \
+    --allow-unauthenticated \
+    --set-env-vars TEST_MODE=false,SHARED_SECRET=your-password,GOOGLE_MAPS_JS_API_KEY=your-js-key \
     --set-secrets GOOGLE_MAPS_API_KEY=google-maps-api-key:latest,GEMINI_API_KEY=gemini-api-key:latest
 
 # Then Hosting (firebase.json's serviceId/region must match the gcloud deploy above):
 firebase login
-firebase use --add          # creates .firebaserc with your project ID (not committed yet -- doesn't exist)
+firebase use --add          # creates .firebaserc with your project ID
 firebase deploy --only hosting
 ```
 
-Prefer Secret Manager (`--set-secrets`) over `--set-env-vars` for `GOOGLE_MAPS_API_KEY` and `GEMINI_API_KEY` — they're real credentials. `GOOGLE_MAPS_JS_API_KEY` is the one exception: it's meant to be browser-visible, so a plain env var is fine, but restrict it by HTTP referrer to the Hosting domain in Cloud Console before deploying.
+**`--allow-unauthenticated` is required**, not optional: Cloud Run gates every request with IAM by default, *before* it ever reaches this app's own `auth.py` password middleware. Without this flag, nobody could reach the app at all — not even with the correct `SHARED_SECRET` — because Cloud Run's own gate would 403 the request first. This app's actual access control is `SHARED_SECRET`; `--allow-unauthenticated` just lets requests through to where that check happens.
+
+**`GOOGLE_MAPS_JS_API_KEY` must be in `--set-env-vars`** — easy to miss since it looks like it belongs with the two Secret Manager keys, but `/api/config` reads it straight from the environment; omitting it silently serves an empty key and the map never renders on the deployed site.
+
+Prefer Secret Manager (`--set-secrets`) over `--set-env-vars` for `GOOGLE_MAPS_API_KEY` and `GEMINI_API_KEY` — they're real credentials. `GOOGLE_MAPS_JS_API_KEY` is the one exception: it's meant to be browser-visible, so a plain env var is fine, but restrict it by HTTP referrer (and ideally by API, to just Maps JavaScript API) to the Hosting domain in Cloud Console before deploying — an unrestricted key in page source can be lifted and used to run up usage on any API it's allowed to call.
 
 **Deferred to this first deploy** (not blocking anything else that's been built):
 - `storage.py` is still local-JSONL, not Firestore. Cloud Run's filesystem is ephemeral, so run records won't survive a redeploy or a cold restart until this is swapped. Every caller already goes through `storage.save_run`/`load_run`/`list_runs`, so swapping the implementation to `google-cloud-firestore` is expected to be an isolated change to that one file — it just couldn't be built and verified without a real Firestore instance (no local emulator available either: Firebase CLI needs a Java runtime that also isn't installed here).
