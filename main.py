@@ -22,7 +22,7 @@ app = FastAPI()
 
 _run_queues: dict[str, asyncio.Queue] = {}
 
-FRIENDLY_ERROR_MESSAGE = "Something unexpected happened while planning this trip. Please try again."
+FRIENDLY_ERROR_MESSAGE = "規劃這個行程時發生了意外錯誤，請再試一次。"
 
 
 @app.middleware("http")

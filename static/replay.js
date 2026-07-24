@@ -18,12 +18,12 @@ async function replay(runId) {
   try {
     response = await fetch(`/api/plan/${encodeURIComponent(runId)}/replay`);
   } catch {
-    replayError.textContent = "Couldn't load this run — check your connection and try again.";
+    replayError.textContent = "無法載入這筆紀錄 — 請檢查網路連線後再試一次。";
     replayError.classList.remove("hidden");
     return;
   }
   if (!response.ok) {
-    replayError.textContent = response.status === 404 ? "This run doesn't exist." : "Couldn't load this run.";
+    replayError.textContent = response.status === 404 ? "這筆紀錄不存在。" : "無法載入這筆紀錄。";
     replayError.classList.remove("hidden");
     return;
   }
@@ -46,7 +46,7 @@ async function replay(runId) {
 
 const runId = new URLSearchParams(window.location.search).get("run_id");
 if (!runId) {
-  replayError.textContent = "No run selected — go back and pick one from the list.";
+  replayError.textContent = "尚未選擇紀錄 — 請回上一頁從清單中選一筆。";
   replayError.classList.remove("hidden");
 } else {
   replay(runId);

@@ -67,7 +67,7 @@ def test_unfittable_preferences_reach_infeasible_with_specific_day_named():
     assert final["status"] == "infeasible"
     assert final["iteration"] <= 8
     assert "day1" in final["final_report"]
-    assert "over by" in final["final_report"]
+    assert "超出" in final["final_report"]
 
 
 def test_no_matching_places_reaches_no_results():
@@ -92,7 +92,7 @@ def test_never_satisfied_plan_stops_at_exactly_the_iteration_cap():
 
     assert final["status"] == "failed_max_iterations"
     assert final["iteration"] == 8
-    assert "unresolved" in final["final_report"]
+    assert "尚未解決" in final["final_report"]
 
     thought_iterations = [e["content"]["iteration"] for e in events if e["type"] == "thought"]
     assert max(thought_iterations) == 8
@@ -111,7 +111,7 @@ def test_done_report_surfaces_weather_reference_note():
     events = list(run_planner(_trip("testville", 2, ["museum", "food"])))
     final = _final(events)
 
-    assert "Weather" in final["final_report"]
+    assert "天氣" in final["final_report"]
 
 
 def test_give_up_report_names_the_specific_gap():
@@ -119,7 +119,7 @@ def test_give_up_report_names_the_specific_gap():
     final = _final(events)
 
     assert "day1" in final["final_report"]
-    assert "over by" in final["final_report"]
+    assert "超出" in final["final_report"]
 
 
 def test_repeated_directions_lookup_within_a_run_hits_the_tool_once(monkeypatch):

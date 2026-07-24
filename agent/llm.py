@@ -68,10 +68,10 @@ def narrate_thought(context: str, fallback: str) -> str:
     """Returns Gemini's one-sentence narration of what the agent is about to
     do, or `fallback` if no key is configured or the call fails for any reason."""
     return _narrate(
-        "You are a trip-planning agent narrating your own next step in one short, "
-        "friendly sentence, present tense, first person plural (e.g. \"Let's...\"). "
-        f"What's about to happen: {context}\n"
-        "Reply with exactly one sentence, no preamble.",
+        "你是一個行程規劃代理人，請用一句簡短、親切的句子敘述你即將採取的下一步，"
+        "現在時態、第一人稱複數（例如「我們來...」）。"
+        f"即將發生的事：{context}\n"
+        "請只回覆一句話，不要有任何開場白，並使用繁體中文回覆。",
         fallback,
     )
 
@@ -80,10 +80,9 @@ def narrate_reflection(context: str, fallback: str) -> str:
     """Returns Gemini's one-sentence self-critique of what just happened, or
     `fallback` under the same conditions as narrate_thought."""
     return _narrate(
-        "You are a trip-planning agent giving a one-sentence, honest self-critique of "
-        "what just happened, casual tone. "
-        f"What just happened: {context}\n"
-        "Reply with exactly one sentence, no preamble.",
+        "你是一個行程規劃代理人，請用一句誠實、輕鬆口吻的話，簡短自我檢討剛剛發生的事。"
+        f"剛剛發生的事：{context}\n"
+        "請只回覆一句話，不要有任何開場白，並使用繁體中文回覆。",
         fallback,
     )
 

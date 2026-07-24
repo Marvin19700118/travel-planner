@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,8 +8,8 @@
        needs these instead to open chrome-less from the home screen. -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Travel Planner" />
-  <title>Travel Planner</title>
+  <meta name="apple-mobile-web-app-title" content="行程規劃助手" />
+  <title>行程規劃助手</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon-192.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
@@ -17,38 +17,38 @@
 </head>
 <body>
   <main class="page">
-    <h1>Plan a trip</h1>
-    <p><a href="/trips.html">View saved trips &rarr;</a> &middot; <a href="/runs.html">View past runs &rarr;</a></p>
+    <h1>規劃行程</h1>
+    <p><a href="/trips.html">查看已儲存的行程 &rarr;</a> &middot; <a href="/runs.html">查看歷史紀錄 &rarr;</a></p>
 
     <form id="plan-form" class="card">
       <label>
-        City / region
-        <input type="text" name="city" required placeholder="e.g. testville" />
+        城市／地區
+        <input type="text" name="city" required placeholder="例如：testville" />
       </label>
       <label>
-        Departure date
+        出發日期
         <input type="date" name="start_date" required />
       </label>
       <label>
-        Days
+        天數
         <input type="number" name="days" min="1" max="7" value="2" required />
       </label>
       <fieldset>
-        <legend>Preferences</legend>
-        <label class="checkbox"><input type="checkbox" name="preferences" value="museum" /> Museums</label>
-        <label class="checkbox"><input type="checkbox" name="preferences" value="nature" /> Nature scenery</label>
-        <label class="checkbox"><input type="checkbox" name="preferences" value="food" /> Food</label>
-        <label class="checkbox"><input type="checkbox" name="preferences" value="historic" /> Historic sites</label>
-        <label class="checkbox"><input type="checkbox" name="preferences" value="shopping" /> Shopping</label>
-        <label class="checkbox"><input type="checkbox" name="preferences" value="night_market" /> Night markets</label>
-        <label class="checkbox"><input type="checkbox" name="preferences" value="hiking" /> Hiking</label>
-        <label class="checkbox"><input type="checkbox" name="preferences" value="golf" /> Golf</label>
+        <legend>偏好</legend>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="museum" /> 博物館</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="nature" /> 自然風景</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="food" /> 美食</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="historic" /> 歷史景點</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="shopping" /> 購物</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="night_market" /> 夜市</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="hiking" /> 健行</label>
+        <label class="checkbox"><input type="checkbox" name="preferences" value="golf" /> 高爾夫</label>
       </fieldset>
-      <button type="submit">Plan my trip</button>
+      <button type="submit">開始規劃</button>
     </form>
 
     <section id="live-view" class="card hidden">
-      <h2>Watching the agent think…</h2>
+      <h2>正在觀察代理人思考中&hellip;</h2>
       <ol id="step-list"></ol>
     </section>
 
@@ -59,7 +59,7 @@
       <div id="map-section" class="hidden">
         <div id="map-tabs" role="tablist"></div>
         <div id="map"></div>
-        <p id="map-unavailable" class="hidden">Map isn't configured on this deployment yet.</p>
+        <p id="map-unavailable" class="hidden">地圖尚未在此部署設定。</p>
       </div>
     </section>
   </main>

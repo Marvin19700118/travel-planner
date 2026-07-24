@@ -23,10 +23,10 @@ function renderTripCard(trip) {
   const exportLink = document.createElement("a");
   exportLink.href = `/export.html?trip_id=${encodeURIComponent(trip.trip_id)}`;
   exportLink.className = "trip-export";
-  exportLink.textContent = "Export";
+  exportLink.textContent = "匯出";
 
   const deleteButton = document.createElement("button");
-  deleteButton.textContent = "Delete";
+  deleteButton.textContent = "刪除";
   deleteButton.className = "trip-delete";
   deleteButton.addEventListener("click", async () => {
     deleteButton.disabled = true;
@@ -34,13 +34,13 @@ function renderTripCard(trip) {
     try {
       response = await fetch(`/api/trips/${trip.trip_id}`, { method: "DELETE" });
     } catch {
-      tripsError.textContent = "Couldn't delete — check your connection and try again.";
+      tripsError.textContent = "無法刪除 — 請檢查網路連線後再試一次。";
       tripsError.classList.remove("hidden");
       deleteButton.disabled = false;
       return;
     }
     if (!response.ok) {
-      tripsError.textContent = "Couldn't delete — please try again.";
+      tripsError.textContent = "無法刪除 — 請再試一次。";
       tripsError.classList.remove("hidden");
       deleteButton.disabled = false;
       return;
@@ -66,12 +66,12 @@ async function loadTrips() {
   try {
     response = await fetch("/api/trips");
   } catch {
-    tripsError.textContent = "Couldn't load saved trips — check your connection and try again.";
+    tripsError.textContent = "無法載入已儲存的行程 — 請檢查網路連線後再試一次。";
     tripsError.classList.remove("hidden");
     return;
   }
   if (!response.ok) {
-    tripsError.textContent = "Couldn't load saved trips — please try again.";
+    tripsError.textContent = "無法載入已儲存的行程 — 請再試一次。";
     tripsError.classList.remove("hidden");
     return;
   }

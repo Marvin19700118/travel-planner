@@ -1,5 +1,7 @@
 # Travel Planner
 
+*[繁體中文版](README.zh-TW.md)*
+
 A ReAct-pattern AI agent that plans a multi-day trip. See [spec.md](spec.md) for the full product spec and the GitHub issues for the ticket breakdown.
 
 Implemented so far: [#2](https://github.com/Marvin19700118/travel-planner/issues/2) (the core loop, `TEST_MODE` fixtures), [#3](https://github.com/Marvin19700118/travel-planner/issues/3) (real Google API + Gemini integration, behind the same seam), [#4](https://github.com/Marvin19700118/travel-planner/issues/4) (the interactive map), part of [#5](https://github.com/Marvin19700118/travel-planner/issues/5) (shared password + deployment artifacts — see "Deployment" below for what's still deferred to a first real deploy), [#6](https://github.com/Marvin19700118/travel-planner/issues/6) (mobile responsive design + PWA), [#7](https://github.com/Marvin19700118/travel-planner/issues/7) (auto-saved trips with real photos + an AI cover image, and a saved-trips list page), [#8](https://github.com/Marvin19700118/travel-planner/issues/8) (one-page printable export with a static map per day), and [#9](https://github.com/Marvin19700118/travel-planner/issues/9) (replay any past run, success or not, with no new external calls).

@@ -1,6 +1,6 @@
 const form = document.getElementById("plan-form");
 
-const OFFLINE_MESSAGE = "You're offline — planning a trip needs a connection. Reconnect and try again.";
+const OFFLINE_MESSAGE = "你目前離線 — 規劃行程需要網路連線，請重新連線後再試一次。";
 
 form.addEventListener("submit", async (submitEvent) => {
   submitEvent.preventDefault();
@@ -35,7 +35,7 @@ form.addEventListener("submit", async (submitEvent) => {
     return;
   }
   if (!response.ok) {
-    addStep("error", "Couldn't start planning — please check your inputs.");
+    addStep("error", "無法開始規劃 — 請檢查輸入內容。");
     return;
   }
   const { run_id } = await response.json();
@@ -54,7 +54,7 @@ form.addEventListener("submit", async (submitEvent) => {
     addStep(event.type, describeEvent(event));
   };
   source.onerror = () => {
-    addStep("error", "Lost connection to the planner.");
+    addStep("error", "與規劃服務的連線中斷了。");
     source.close();
   };
 });

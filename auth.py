@@ -37,15 +37,15 @@ LOGIN_PATH = "/login"
 _COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
 
 _LOGIN_PAGE = """<!doctype html>
-<html><head><meta charset="utf-8">
+<html lang="zh-Hant"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#ff8c66">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Travel Planner">
+<meta name="apple-mobile-web-app-title" content="行程規劃助手">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-192.png">
-<title>Travel Planner &mdash; Sign in</title>
+<title>行程規劃助手 &mdash; 登入</title>
 <style>
   body {{ font-family: -apple-system, "Noto Sans TC", sans-serif; background: #fffaf3; color: #3a2e2c;
           display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0;
@@ -60,10 +60,10 @@ _LOGIN_PAGE = """<!doctype html>
 </style></head>
 <body>
   <form method="post" action="{login_path}">
-    <h2>Enter password</h2>
+    <h2>請輸入密碼</h2>
     {error}
-    <input type="password" name="password" placeholder="Password" autofocus required />
-    <button type="submit">Continue</button>
+    <input type="password" name="password" placeholder="密碼" autofocus required />
+    <button type="submit">繼續</button>
   </form>
 </body></html>
 """
@@ -91,7 +91,7 @@ def is_authorized(request: Request) -> bool:
 
 
 def render_login_page(*, error: bool = False) -> HTMLResponse:
-    error_html = '<p class="error">Wrong password.</p>' if error else ""
+    error_html = '<p class="error">密碼錯誤。</p>' if error else ""
     return HTMLResponse(_LOGIN_PAGE.format(login_path=LOGIN_PATH, error=error_html), status_code=401)
 
 

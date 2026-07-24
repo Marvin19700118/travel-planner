@@ -15,10 +15,32 @@ const mapDiv = document.getElementById("map");
 const mapUnavailable = document.getElementById("map-unavailable");
 
 const STATUS_TITLES = {
-  done: "Your itinerary is ready",
-  infeasible: "This one doesn't quite fit",
-  no_results: "Couldn't find what you're looking for",
-  failed_max_iterations: "Ran out of attempts",
+  done: "你的行程已經準備好了",
+  infeasible: "這個行程不太合適",
+  no_results: "找不到符合條件的地點",
+  failed_max_iterations: "已用完嘗試次數",
+};
+
+// Display labels only -- the underlying event.type / preference key stays
+// the English identifier the backend uses (CSS class names, stored data),
+// this map is purely for what the user reads.
+const STEP_LABELS = {
+  thought: "想法",
+  action: "行動",
+  observation: "觀察",
+  reflection: "反思",
+  error: "錯誤",
+};
+
+const PREFERENCE_LABELS = {
+  museum: "博物館",
+  nature: "自然風景",
+  food: "美食",
+  historic: "歷史景點",
+  shopping: "購物",
+  night_market: "夜市",
+  hiking: "健行",
+  golf: "高爾夫",
 };
 
 function addStep(type, text) {
@@ -26,7 +48,7 @@ function addStep(type, text) {
   li.className = `step ${type}`;
   const label = document.createElement("div");
   label.className = "step-label";
-  label.textContent = type;
+  label.textContent = STEP_LABELS[type] || type;
   const body = document.createElement("div");
   body.textContent = text;
   li.appendChild(label);
@@ -40,7 +62,7 @@ function describeEvent(event) {
     case "thought":
       return event.content.text;
     case "action":
-      return `Calling ${event.content.action.tool}…`;
+      return `正在呼叫 ${event.content.action.tool}…`;
     case "observation":
       return JSON.stringify(event.content.observation.result);
     case "reflection":
@@ -65,7 +87,8 @@ function renderItinerary(dayAllocations) {
       const list = document.createElement("ul");
       dayAllocations[day].forEach((stop) => {
         const li = document.createElement("li");
-        li.textContent = `${stop.name} (${stop.duration_hr}h, ${stop.preference})`;
+        const preferenceLabel = PREFERENCE_LABELS[stop.preference] || stop.preference;
+        li.textContent = `${stop.name}（${stop.duration_hr} 小時，${preferenceLabel}）`;
         list.appendChild(li);
       });
       block.appendChild(heading);
@@ -136,7 +159,7 @@ function renderDay(day, dayAllocations, dayPolylines) {
     const position = { lat: stop.lat, lng: stop.lng };
     const marker = new google.maps.Marker({ position, map, title: stop.name });
     const infoWindow = new google.maps.InfoWindow({
-      content: `<strong>${stop.name}</strong><br>${stop.address || ""}<br>${stop.duration_hr}h`,
+      content: `<strong>${stop.name}</strong><br>${stop.address || ""}<br>${stop.duration_hr} 小時`,
     });
     marker.addListener("click", () => infoWindow.open(map, marker));
     activeOverlays.push(marker);
@@ -190,14 +213,14 @@ async function showMap(dayAllocations, dayPolylines) {
   mapSection.classList.remove("hidden");
 
   if (!mapsApiKey) {
-    showMapUnavailable("Map isn't configured on this deployment yet.");
+    showMapUnavailable("地圖尚未在此部署設定。");
     return;
   }
 
   try {
     await loadMapsScript();
   } catch {
-    showMapUnavailable("Couldn't load the map.");
+    showMapUnavailable("無法載入地圖。");
     return;
   }
 

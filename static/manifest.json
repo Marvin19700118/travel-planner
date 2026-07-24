@@ -1,7 +1,7 @@
 {
-  "name": "Travel Planner",
-  "short_name": "Travel Planner",
-  "description": "A ReAct-pattern AI agent that plans a multi-day trip",
+  "name": "行程規劃助手",
+  "short_name": "行程助手",
+  "description": "使用 ReAct 模式的 AI 代理人，協助規劃多天行程",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fffaf3",

@@ -3,11 +3,11 @@ const runsEmpty = document.getElementById("runs-empty");
 const runsError = document.getElementById("runs-error");
 
 const STATUS_LABELS = {
-  done: "Done",
-  infeasible: "Didn't fit",
-  no_results: "No results",
-  failed_max_iterations: "Ran out of attempts",
-  in_progress: "In progress",
+  done: "已完成",
+  infeasible: "不合適",
+  no_results: "無結果",
+  failed_max_iterations: "已用完嘗試次數",
+  in_progress: "進行中",
 };
 
 function renderRunCard(run) {
@@ -21,7 +21,7 @@ function renderRunCard(run) {
   title.textContent = run.request.city;
 
   const meta = document.createElement("p");
-  meta.textContent = `${run.request.days} day(s) · ${run.request.start_date}`;
+  meta.textContent = `${run.request.days} 天 · ${run.request.start_date}`;
 
   const badge = document.createElement("span");
   badge.className = `run-status run-status-${run.status}`;
@@ -30,7 +30,7 @@ function renderRunCard(run) {
   const replayLink = document.createElement("a");
   replayLink.href = `/replay.html?run_id=${encodeURIComponent(run.run_id)}`;
   replayLink.className = "run-replay";
-  replayLink.textContent = "Replay →";
+  replayLink.textContent = "重播 →";
 
   info.appendChild(title);
   info.appendChild(meta);
@@ -45,12 +45,12 @@ async function loadRuns() {
   try {
     response = await fetch("/api/runs");
   } catch {
-    runsError.textContent = "Couldn't load past runs — check your connection and try again.";
+    runsError.textContent = "無法載入歷史紀錄 — 請檢查網路連線後再試一次。";
     runsError.classList.remove("hidden");
     return;
   }
   if (!response.ok) {
-    runsError.textContent = "Couldn't load past runs — please try again.";
+    runsError.textContent = "無法載入歷史紀錄 — 請再試一次。";
     runsError.classList.remove("hidden");
     return;
   }

@@ -40,7 +40,7 @@ function renderStop(stop) {
   const name = document.createElement("strong");
   name.textContent = stop.name;
   const detail = document.createElement("span");
-  detail.textContent = `${stop.duration_hr}h${stop.address ? " · " + stop.address : ""}`;
+  detail.textContent = `${stop.duration_hr} 小時${stop.address ? " · " + stop.address : ""}`;
   info.appendChild(name);
   info.appendChild(detail);
 
@@ -67,7 +67,7 @@ function renderDay(day, stops, polyline, mapsApiKey) {
   if (mapsApiKey) {
     const map = document.createElement("img");
     map.className = "export-map";
-    map.alt = `Map of ${day}'s route`;
+    map.alt = `${day} 路線地圖`;
     // A failed Static Maps request (bad key restriction, quota, network)
     // must never leave a broken-image icon in a printed page -- swap in
     // the same text fallback used when no key is configured at all.
@@ -75,14 +75,14 @@ function renderDay(day, stops, polyline, mapsApiKey) {
       "error",
       () => {
         map.remove();
-        appendMapUnavailable(block, "Couldn't load this day's map.");
+        appendMapUnavailable(block, "無法載入這一天的地圖。");
       },
       { once: true }
     );
     map.src = buildStaticMapUrl(stops, polyline, mapsApiKey);
     block.appendChild(map);
   } else {
-    appendMapUnavailable(block, "Map isn't configured on this deployment yet.");
+    appendMapUnavailable(block, "地圖尚未在此部署設定。");
   }
 
   const list = document.createElement("ul");
@@ -118,12 +118,12 @@ async function loadExport(tripId) {
   try {
     tripResponse = await fetch(`/api/trips/${tripId}`);
   } catch {
-    showError("Couldn't load this trip — check your connection and try again.");
+    showError("無法載入這筆行程 — 請檢查網路連線後再試一次。");
     return;
   }
 
   if (!tripResponse.ok) {
-    showError(tripResponse.status === 404 ? "This trip doesn't exist." : "Couldn't load this trip.");
+    showError(tripResponse.status === 404 ? "這筆行程不存在。" : "無法載入這筆行程。");
     return;
   }
 
@@ -131,7 +131,7 @@ async function loadExport(tripId) {
   const mapsApiKey = await loadMapsApiKey();
 
   exportCover.src = trip.cover_image_url || "/icon-512.png";
-  exportCover.alt = `${trip.city} cover`;
+  exportCover.alt = `${trip.city} 封面圖`;
   exportTitle.textContent = trip.city;
   exportMeta.textContent = `${dayCountLabel(trip.days)} · ${trip.start_date}`;
 
@@ -149,7 +149,7 @@ printButton.addEventListener("click", () => window.print());
 
 const tripId = new URLSearchParams(window.location.search).get("trip_id");
 if (!tripId) {
-  showError("No trip selected — go back and pick one from your saved trips.");
+  showError("尚未選擇行程 — 請回上一頁從已儲存的行程中選一筆。");
 } else {
   loadExport(tripId);
 }

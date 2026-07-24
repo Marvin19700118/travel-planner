@@ -34,7 +34,7 @@ def prepare(request: TripRequest) -> PlannerState:
     coords = cache.get_or_compute(("geocode", request.city), lambda: tools.geocode(request.city))
     if coords is None:
         state["status"] = "no_results"
-        state["final_report"] = f'Couldn\'t find "{request.city}" — please check the city name and try again.'
+        state["final_report"] = f'找不到「{request.city}」— 請確認城市名稱後再試一次。'
         return state
     state["lat"], state["lng"] = coords
 
@@ -52,9 +52,7 @@ def prepare(request: TripRequest) -> PlannerState:
 
     if request.preferences and len(no_results) == len(request.preferences):
         state["status"] = "no_results"
-        state["final_report"] = (
-            f'Couldn\'t find any places in "{request.city}" matching your selected preferences.'
-        )
+        state["final_report"] = f'在「{request.city}」找不到符合所選偏好的地點。'
     return state
 
 
@@ -135,12 +133,10 @@ def think(state: PlannerState) -> dict:
     actions = list(state["actions"])
 
     if iteration == 1:
-        fallback_thought = "Let's check the weather for this trip before anything else."
+        fallback_thought = "讓我們先查一下這次行程的天氣。"
         action = {"tool": "get_weather", "input": {}}
     elif iteration == 2:
-        fallback_thought = (
-            "Now let's lay out a first draft across all the days and see how the travel time adds up."
-        )
+        fallback_thought = "現在來排出第一版每日行程，看看交通時間加起來如何。"
         action = {"tool": "initial_allocate_and_check", "input": {}}
     else:
         over_time = state["over_time_days"]
@@ -150,20 +146,16 @@ def think(state: PlannerState) -> dict:
             candidate = _find_trimmable(state["day_allocations"].get(worst_day, []), counts)
             if candidate:
                 fallback_thought = (
-                    f'{worst_day} is over budget. Let\'s drop "{candidate["name"]}", '
-                    "the least essential remaining stop, and recheck."
+                    f'{worst_day} 超出時間預算。讓我們拿掉「{candidate["name"]}」這個最不必要的景點，再重新檢查一次。'
                 )
             else:
                 fallback_thought = (
-                    f"{worst_day} is still over budget, but every remaining stop is the only "
-                    "representative of its preference — there's nothing safe left to trim."
+                    f"{worst_day} 仍然超出時間預算，但剩下的每個景點都是該偏好類別中唯一的代表 "
+                    "—— 已經沒有可以安全移除的項目了。"
                 )
             action = {"tool": "trim_worst_day", "input": {"day": worst_day}}
         else:
-            fallback_thought = (
-                "Every day fits, but not every preference is represented yet — "
-                "there's nothing further we can safely do."
-            )
+            fallback_thought = "每天的時間都在預算內，但還沒有涵蓋所有偏好 —— 目前沒有可以再安全調整的空間了。"
             action = {"tool": "trim_worst_day", "input": {"day": None}}
 
     thought = llm.narrate_thought(fallback_thought, fallback=fallback_thought)
@@ -195,7 +187,7 @@ def act(state: PlannerState) -> dict:
             )
             observations.append(_observe(tool, results))
             for r in results:
-                weather_notes.append(f"{r['date']}: {r['condition']}, {r['temp_c']}°C")
+                weather_notes.append(f"{r['date']}：{r['condition']}，{r['temp_c']}°C")
         except Exception as exc:  # defensive: a tool failure must not crash the run
             observations.append(_observe(tool, None, success=False, error=str(exc)))
 
@@ -260,31 +252,28 @@ def reflect(state: PlannerState) -> dict:
     latest = state["observations"][-1] if state["observations"] else None
 
     if latest is None:
-        fallback_reflection = "Nothing to reflect on yet."
+        fallback_reflection = "目前還沒有可以檢討的內容。"
     elif latest["tool"] == "get_weather":
         if latest["success"]:
-            fallback_reflection = "Weather noted for reference; it won't change the schedule."
+            fallback_reflection = "天氣資訊已記錄供參考，不會影響行程安排。"
         else:
-            fallback_reflection = "Couldn't get a forecast (likely outside the supported date range) — skipping it."
+            fallback_reflection = "無法取得天氣預報（可能超出支援的日期範圍）—— 先略過。"
     elif latest["tool"] == "initial_allocate_and_check":
         if state["over_time_days"]:
             fallback_reflection = (
-                f"Day(s) over budget: {', '.join(state['over_time_days'])}. Still not good enough — need to trim."
+                f"超出預算的天數：{'、'.join(state['over_time_days'])}。還不夠好 —— 需要再刪減。"
             )
         else:
-            fallback_reflection = "Every day fits within the touring budget so far."
+            fallback_reflection = "目前每天的時間都在旅遊預算內。"
     else:  # trim_worst_day
         result = latest["result"]
         if result.get("removed"):
             fallback_reflection = (
-                f'Removed "{result["removed"]}" from {result["day"]}; new total is '
-                f'{result["new_total"]:.1f}h. Better, but let\'s check if it\'s enough.'
+                f'已從 {result["day"]} 移除「{result["removed"]}」，新的總時數為 '
+                f'{result["new_total"]:.1f} 小時。有進步，但還要再確認是否足夠。'
             )
         else:
-            fallback_reflection = (
-                "Couldn't safely remove anything more without dropping a preference entirely. "
-                "Still not good enough."
-            )
+            fallback_reflection = "已經無法再安全移除任何項目，否則會完全放棄某個偏好。仍然不夠好。"
 
     reflection = llm.narrate_reflection(fallback_reflection, fallback=fallback_reflection)
     reflections.append(reflection)
@@ -302,20 +291,20 @@ def route_after_reflect(state: PlannerState) -> str:
 
 
 def finalize_finish(state: PlannerState) -> dict:
-    report = "Your itinerary is ready."
+    report = "你的行程已經準備好了。"
     if state["weather_notes"]:
-        report += " Weather for reference: " + "; ".join(state["weather_notes"]) + "."
+        report += " 天氣參考資訊：" + "；".join(state["weather_notes"]) + "。"
     return {"status": "done", "final_report": report}
 
 
 def finalize_infeasible(state: PlannerState) -> dict:
     parts = [
-        f"{d} is over by {state['day_totals'][d] - TOURING_HOURS_PER_DAY:.1f}h"
+        f"{d} 超出 {state['day_totals'][d] - TOURING_HOURS_PER_DAY:.1f} 小時"
         for d in state["over_time_days"]
     ]
     return {
         "status": "infeasible",
-        "final_report": "This doesn't fit: " + "; ".join(parts) + ". Try removing a preference or adding a day.",
+        "final_report": "這個行程安排不下：" + "；".join(parts) + "。試著移除一個偏好或增加一天。",
     }
 
 
@@ -325,18 +314,17 @@ def finalize_give_up(state: PlannerState) -> dict:
     gaps = []
     if state["over_time_days"]:
         parts = [
-            f"{d} still over by {state['day_totals'][d] - TOURING_HOURS_PER_DAY:.1f}h"
+            f"{d} 仍超出 {state['day_totals'][d] - TOURING_HOURS_PER_DAY:.1f} 小時"
             for d in state["over_time_days"]
         ]
-        gaps.append("; ".join(parts))
+        gaps.append("；".join(parts))
     if missing_preferences:
-        gaps.append(f"no stop found yet for: {', '.join(missing_preferences)}")
-    gap_text = "; ".join(gaps) if gaps else "still checking whether the current plan fits"
+        gaps.append(f"尚未找到符合以下偏好的景點：{'、'.join(missing_preferences)}")
+    gap_text = "；".join(gaps) if gaps else "仍在確認目前的行程是否可行"
     return {
         "status": "failed_max_iterations",
         "final_report": (
-            f"Hit the {state['max_iterations']}-iteration limit before finishing. "
-            f"What's still unresolved: {gap_text}."
+            f"已達到 {state['max_iterations']} 次嘗試上限但仍未完成規劃。尚未解決的部分：{gap_text}。"
         ),
     }
 
