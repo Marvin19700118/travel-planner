@@ -1,36 +1,34 @@
 """Gemini-backed narration for the Thought and Reflection steps.
 
-Scoping note (this could not be verified against a live key while building
-it — treat as needing a first real smoke test once GEMINI_API_KEY is set):
+Scoping note:
 
 Tool/action *selection* — which of get_weather / initial_allocate_and_check
 / trim_worst_day runs next, which day gets trimmed, which stop is safe to
 remove — stays fully deterministic in graph.py regardless of whether an LLM
 is configured. That logic is what the touring-budget and preference-
-coverage acceptance criteria depend on, and there was no live key available
-to verify an LLM would reproduce it reliably through function-calling.
+coverage acceptance criteria depend on; an LLM was never trusted to
+reproduce it reliably through function-calling.
 
 What Gemini adds here, when GEMINI_API_KEY is set, is genuine LLM-authored
 narration of the already-decided action and its result — the Thought/
 Reflection text a user reads is real model output, not a template. Without
-a key (including right now, before real credentials are configured), both
-functions fall back to the deterministic strings already built and tested
-in ticket #2, so the app stays fully usable with real Places/Directions/
-Weather data even before Gemini is wired up.
+a key, both functions fall back to the deterministic strings already built
+and tested in ticket #2, so the app stays fully usable with real Places/
+Directions/Weather data even without Gemini wired up.
 """
 
 from __future__ import annotations
 
 import os
 
-_MODEL = "gemini-2.0-flash"
+# gemini-2.0-flash was retired (confirmed live: 404 NOT_FOUND, "no longer
+# available") despite still showing up in models.list(). Using the 3.1
+# series per the maintainer's preference -- confirmed live with a real key.
+_MODEL = "gemini-3.1-flash-lite"
 
-# Uncertain / needs a first live check: this is the model id documented for
-# Gemini image generation at the time this was written, but that surface
-# has moved before and there was no key available to actually confirm it
-# still returns image parts. If generate_cover_image() starts returning
-# None with a real key set, check this name first.
-_IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"
+# gemini-2.0-flash-preview-image-generation was likewise retired; confirmed
+# live that gemini-3.1-flash-image returns an image part.
+_IMAGE_MODEL = "gemini-3.1-flash-image"
 
 # Fixed on purpose: every saved trip's cover should look like it came from
 # the same illustrator, not a different style each time (spec.md section 3).
