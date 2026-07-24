@@ -41,7 +41,12 @@ CITIES: dict[str, dict] = {
     },
     "sprawlville": {
         "coords": (30.0, 40.0),
-        "travel_hr_per_gap": 1.0,
+        # Retuned 2026-07-24 for the new origin-round-trip + 12h clock window
+        # (was 1.0): 2 stops now means 3 legs (origin->hiking, hiking->golf,
+        # golf->origin), and DAY_WINDOW_HOURS grew from 8 to 12 -- at the old
+        # per-gap value this scenario would now fit (10.5h <= 12h) instead of
+        # demonstrating "infeasible". 2.0 keeps it clearly over (13.5h).
+        "travel_hr_per_gap": 2.0,
         "candidates": {
             "hiking": [
                 {"id": "h1", "name": "Sprawlville Trail", "duration_hr": 3.0, "category": "hiking", "lat": 30.5, "lng": 40.0, "address": "Trailhead Rd, Sprawlville"},
@@ -103,12 +108,14 @@ def get_weather(city: str, lat: float, lng: float, dates: list[str]) -> list[dic
 _SAMPLE_POLYLINE = "_p~iF~ps|U_ulLnnqC_mqNvxq`@"
 
 
-def get_directions(city: str, stops: list[dict]) -> dict:
+def get_directions(city: str, origin: tuple[float, float], stops: list[dict]) -> dict:
     entry = CITIES.get(city.strip().lower())
-    per_gap = entry["travel_hr_per_gap"] if entry else 0.25
-    gaps = max(0, len(stops) - 1)
-    polyline = _SAMPLE_POLYLINE if gaps > 0 else None
-    return {"travel_hours": gaps * per_gap, "polyline": polyline}
+    per_gap_hr = entry["travel_hr_per_gap"] if entry else 0.25
+    if not stops:
+        return {"travel_hours": 0.0, "leg_minutes": [], "polyline": None}
+    num_legs = len(stops) + 1  # origin -> stop 1 -> ... -> stop N -> origin
+    leg_minutes = [per_gap_hr * 60] * num_legs
+    return {"travel_hours": sum(leg_minutes) / 60, "leg_minutes": leg_minutes, "polyline": _SAMPLE_POLYLINE}
 
 
 def get_photo_bytes(photo_reference: str) -> bytes:

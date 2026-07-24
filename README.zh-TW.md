@@ -10,6 +10,8 @@
 
 **維護者決策，2026-07-24 —— 沒完全排好的行程也值得留下來：** 原本只有完全排進時間預算的 `done` 行程才會顯示地圖、才會存進行程列表；`infeasible`／`failed_max_iterations` 的執行只能透過重播（#9）看過程。實際用起來發現這個限制太嚴格——一個雖然某天還超出 2 小時、但已經跑到 8 次嘗試上限的行程，其實仍然是個真實、大部分可用的計畫。現在**任何真的產生出景點分配的執行**，不論狀態如何，都會顯示地圖（`static/viewer.js` 的 `showResult`）並被儲存（`main.py` 的 `execute_run`）——狀態本身會誠實地存下來並顯示（`trips.html` 上的「已用完嘗試次數」／「不合適」標籤，不會被悄悄改成「已完成」）。只有 `no_results` 仍被排除，因為它從一開始就沒有任何景點分配可以顯示。
 
+**維護者決策，2026-07-24 —— 每一天都是從真實出發地點出發、按真實時鐘走的一個來回：** 現在的請求多了一個自由文字的 `origin`（出發地點）欄位，會用跟 `city` 一樣的方式做地理編碼；每一天的路線也改成 `出發地點 → 景點1 → ... → 景點N → 出發地點` 的來回行程，而不是單純一串景點。原本抽象的 `TOURING_HOURS_PER_DAY = 8.0` 時間預算，已經完全被 `DAY_WINDOW_HOURS = 12.0` 取代，並以早上 08:00 出發為錨點 —— 檢查的還是同一套「停留時間 + 交通時間」總數，只是門檻的意義從一個抽象數字，變成了真正對應到時鐘的意義（必須在 20:00 前回到出發地點）。`agent/graph.py` 的 `_build_day_schedule` 會用每一天真實的每段 Directions 交通分鐘數，從 08:00 開始往後推算出每個景點的抵達／離開時間，以及最後回到出發地點的時間 —— 這純粹是疊加在既有可行性數字上的顯示用計算，完全不會回頭影響刪減迴圈本身。每個景點也會多一段 Gemini 生成的 50 到 100 字繁體中文介紹（`agent/llm.py` 的 `describe_place`，跟現有敘述函式一樣，沒有金鑰或失敗時回傳 `None`），同時顯示在互動地圖標記的 `InfoWindow` 裡，以及文字行程列表中可點擊展開（`<details>`）的那一行 —— 而時間表和介紹文字都只在最終確定時（finalize time）計算一次（不是在刪減迴圈裡），並原封不動存進已儲存的行程，讓匯出頁（#8）也不需要再多打任何新的呼叫就能顯示。
+
 ## 安裝
 
 ```bash
@@ -51,15 +53,16 @@ set GEMINI_API_KEY=your-key
 .venv\Scripts\python.exe -m uvicorn main:app --reload
 ```
 
-在 `TEST_MODE=true` 底下，可以在表單裡輸入以下城市名稱來觸發每一種終止狀態：
+在 `TEST_MODE=true` 底下，可以在表單裡輸入以下城市名稱來觸發每一種終止狀態。**`prepare()` 會用跟 `city` 一樣的方式對 `origin` 做地理編碼** —— 因為 `TEST_MODE` 的假資料地理編碼器只認得下面這四個名稱，`origin` 也必須設成其中之一（通常跟 `city` 填一樣的值），否則在真正查到城市之前，執行就會先以出發地點專屬的訊息短路成 `no_results`：
 
-| 城市 | 要選的偏好 | 天數 | 結果 |
-|---|---|---|---|
-| `testville` | museum、food | 2 | `done`（完成） |
-| `sprawlville` | hiking、golf | 1 | `infeasible`（安排不下） |
-| `emptyville` | 任意 | 1 | `no_results`（無結果） |
-| `loopville` | food | 1 | `failed_max_iterations`（用完嘗試次數） |
-| 其他任意名稱 | 任意 | 任意 | `no_results`（無法辨識的城市） |
+| 城市 | 出發地點 | 要選的偏好 | 天數 | 結果 |
+|---|---|---|---|---|
+| `testville` | `testville` | museum、food | 2 | `done`（完成） |
+| `sprawlville` | `sprawlville` | hiking、golf | 1 | `infeasible`（安排不下） |
+| `emptyville` | `emptyville` | 任意 | 1 | `no_results`（無結果） |
+| `loopville` | `loopville` | food | 1 | `failed_max_iterations`（用完嘗試次數） |
+| 其他任意名稱 | 任一可辨識的名稱 | 任意 | 任意 | `no_results`（無法辨識的城市） |
+| 任一可辨識的名稱 | 其他任意名稱 | 任意 | 任意 | `no_results`（無法辨識的出發地點） |
 
 ## 部署
 
@@ -125,19 +128,19 @@ firebase deploy --only hosting
 - `agent/state.py` —— `PlannerState`、`TripRequest`，以及 `RunCache`（單次執行內的工具呼叫記憶體快取）
 - `agent/tools.py` —— 唯一的 seam：`TEST_MODE` 會在假資料與真實 HTTP 實作之間切換每一個外部呼叫
 - `agent/fixtures.py` —— 上面提到的四種情境假資料
-- `agent/llm.py` —— Gemini 驅動的 Thought/Reflection 敘述，沒有金鑰時會退回固定字串（工具*選擇*本身永遠是確定性邏輯 —— 詳見模組內的說明文件）
-- `agent/graph.py` —— LangGraph 迴圈（`think` → `act` → `reflect` → 路由）以及驅動整個迴圈的 `run_planner()` generator
+- `agent/llm.py` —— Gemini 驅動的 Thought/Reflection 敘述以及每個景點的介紹文字（`describe_place`），沒有金鑰時會退回固定字串／`None`（工具*選擇*本身永遠是確定性邏輯 —— 詳見模組內的說明文件）
+- `agent/graph.py` —— LangGraph 迴圈（`think` → `act` → `reflect` → 路由）以及驅動整個迴圈的 `run_planner()` generator；也會在最終確定時建立以 08:00 為錨點的每日時間表並附上景點介紹
 - `storage.py` —— 本機 JSONL 執行紀錄儲存（**尚未換成 Firestore** —— 詳見「部署」一節）
-- `trips.py` —— 本機 JSON 儲存已自動儲存完成的行程，並負責抓取真實景點照片與 AI 封面插畫的加值處理；也會原封不動存下 `day_polylines`，讓匯出頁（#8）不需要再多打一次 Directions（**尚未換成 Firestore** —— 詳見「部署」一節）
+- `trips.py` —— 本機 JSON 儲存已自動儲存完成的行程，並負責抓取真實景點照片與 AI 封面插畫的加值處理；也會原封不動存下 `day_polylines` 與 `day_schedules`，讓匯出頁（#8）不需要再多打一次 Directions 或 Gemini 呼叫（**尚未換成 Firestore** —— 詳見「部署」一節）
 - `image_store.py` —— 本機檔案系統儲存景點／封面照片（**尚未換成 Firebase Storage** —— 詳見「部署」一節）
 - `auth.py` —— 共享密碼機制（cookie 檢查、登入頁面、登入處理）
 - `main.py` —— FastAPI app：密碼 middleware、`POST /api/plan`、`GET /api/plan/{run_id}/stream`（SSE）、`GET /api/plan/{run_id}/replay`、`GET /api/runs`、`GET /api/config`、`GET /api/trips`、`GET /api/trips/{trip_id}`、`DELETE /api/trips/{trip_id}`、`GET /images/{trip_id}/{filename}`、`POST /login`
 - `static/` —— 純 HTML/CSS/JS 前端，響應式設計最小支援到 375px 的手機螢幕寬度
-- `static/viewer.js` —— 即時畫面與重播畫面共用的渲染邏輯（步驟列表、結果、互動地圖），確保兩者的畫面永遠不會不一致
+- `static/viewer.js` —— 即時畫面與重播畫面共用的渲染邏輯（步驟列表、結果、互動地圖），確保兩者的畫面永遠不會不一致；每個景點的時間與介紹文字會顯示在可點擊展開的列表行與地圖標記的 `InfoWindow` 裡
 - `static/trips.html`、`static/trips.js` —— 已儲存行程列表頁（封面圖、城市、天數、刪除、匯出連結）
 - `static/runs.html`、`static/runs.js` —— 所有歷史紀錄（不論結果如何），各自連結到對應的重播頁（ticket #9）
 - `static/replay.html`、`static/replay.js` —— 透過 `viewer.js` 的渲染邏輯，逐步重播一次已儲存執行紀錄的每個事件，每個步驟間有短暫延遲；不會呼叫任何外部景點／天氣／路線／LLM 服務，只會呼叫這個 app 自己的 `/api/plan/{run_id}/replay`
-- `static/export.html`、`static/export.js` —— 一頁式可列印行程：封面圖、逐天景點列表附真實縮圖、每天一張 Static Maps API 地圖圖片（ticket #8）
+- `static/export.html`、`static/export.js` —— 一頁式可列印行程：封面圖、逐天景點列表附真實縮圖、每個景點的時間與介紹文字、當天的返程時間，以及每天一張 Static Maps API 地圖圖片（ticket #8）
 - `static/manifest.json`、`static/icon-*.png` —— PWA manifest 與圖示（珊瑚色底上一個簡單的太陽圖案，呼應整體視覺風格）
 - `static/sw.js` —— 只快取靜態外殼的 service worker（絕不快取 API 回應）；詳見上方 `CACHE_NAME` 的說明
 - `Dockerfile`、`.dockerignore` —— Cloud Run 容器建置設定（尚未實際建置測試過 —— 本機沒有 Docker）

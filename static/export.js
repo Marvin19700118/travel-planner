@@ -27,7 +27,7 @@ function buildStaticMapUrl(stops, polyline, mapsApiKey) {
   return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
 }
 
-function renderStop(stop) {
+function renderStop(stop, schedule) {
   const li = document.createElement("li");
   li.className = "export-stop";
 
@@ -38,11 +38,22 @@ function renderStop(stop) {
 
   const info = document.createElement("div");
   const name = document.createElement("strong");
-  name.textContent = stop.name;
+  const timeRange = schedule ? `${schedule.arrival}–${schedule.departure}　` : "";
+  name.textContent = `${timeRange}${stop.name}`;
   const detail = document.createElement("span");
   detail.textContent = `${stop.duration_hr} 小時${stop.address ? " · " + stop.address : ""}`;
   info.appendChild(name);
   info.appendChild(detail);
+  // Printed export has no click-to-expand affordance (it's a static page,
+  // not the interactive viewer), so the description just always shows when
+  // one was generated -- same None-means-omit contract as viewer.js, just
+  // rendered flat instead of inside a <details>.
+  if (stop.description) {
+    const description = document.createElement("p");
+    description.className = "export-stop-description";
+    description.textContent = stop.description;
+    info.appendChild(description);
+  }
 
   li.appendChild(img);
   li.appendChild(info);
@@ -56,7 +67,7 @@ function appendMapUnavailable(block, message) {
   block.appendChild(unavailable);
 }
 
-function renderDay(day, stops, polyline, mapsApiKey) {
+function renderDay(day, stops, polyline, mapsApiKey, schedule) {
   const block = document.createElement("section");
   block.className = "export-day";
 
@@ -87,8 +98,18 @@ function renderDay(day, stops, polyline, mapsApiKey) {
 
   const list = document.createElement("ul");
   list.className = "export-stops";
-  stops.forEach((stop) => list.appendChild(renderStop(stop)));
+  stops.forEach((stop, index) => {
+    const stopSchedule = schedule ? schedule.stops[index] : null;
+    list.appendChild(renderStop(stop, stopSchedule));
+  });
   block.appendChild(list);
+
+  if (schedule) {
+    const returnNote = document.createElement("p");
+    returnNote.className = "export-return-note";
+    returnNote.textContent = `${schedule.return_time} 返回出發地點`;
+    block.appendChild(returnNote);
+  }
 
   exportDays.appendChild(block);
 }
@@ -141,7 +162,8 @@ async function loadExport(tripId) {
     .sort()
     .forEach((day) => {
       const polyline = (trip.day_polylines || {})[day] || null;
-      renderDay(day, trip.day_allocations[day], polyline, mapsApiKey);
+      const schedule = (trip.day_schedules || {})[day] || null;
+      renderDay(day, trip.day_allocations[day], polyline, mapsApiKey, schedule);
     });
 
   exportContent.classList.remove("hidden");

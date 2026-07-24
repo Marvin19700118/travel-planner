@@ -19,7 +19,14 @@ from langgraph.graph import END, StateGraph
 from . import llm, tools
 from .state import PlannerState, TripRequest, day_key, new_state
 
-TOURING_HOURS_PER_DAY = 8.0
+# Every day is a round trip from the user's origin, departing 08:00 and
+# needing to be back by 20:00 (maintainer decision, 2026-07-24; replaces the
+# old, clock-agnostic TOURING_HOURS_PER_DAY=8.0 budget). day_totals stays the
+# same "duration + travel" hour figure it always was -- only the threshold
+# and its meaning changed, from an abstract touring budget to a real
+# 08:00-20:00 window.
+DAY_WINDOW_HOURS = 12.0
+DAY_START_MINUTES = 8 * 60
 
 
 # ---------------------------------------------------------------------------
@@ -30,6 +37,13 @@ TOURING_HOURS_PER_DAY = 8.0
 def prepare(request: TripRequest) -> PlannerState:
     state = new_state(request)
     cache = state["cache"]
+
+    origin_coords = cache.get_or_compute(("geocode", request.origin), lambda: tools.geocode(request.origin))
+    if origin_coords is None:
+        state["status"] = "no_results"
+        state["final_report"] = f'找不到出發地點「{request.origin}」— 請確認地址後再試一次。'
+        return state
+    state["origin_lat"], state["origin_lng"] = origin_coords
 
     coords = cache.get_or_compute(("geocode", request.city), lambda: tools.geocode(request.city))
     if coords is None:
@@ -79,19 +93,31 @@ def _initial_allocation(state: PlannerState) -> dict[str, list[dict]]:
 
 
 def _compute_day_metrics(state: PlannerState, day_items: list[dict]) -> dict:
-    """Returns {"total": hours, "polyline": route geometry or None}. The
-    polyline comes straight from the same Directions call used for the
-    feasibility check — the map (ticket #4) reuses it rather than asking
-    the browser to compute its own route."""
+    """Returns {"total": hours, "polyline": route geometry or None,
+    "leg_minutes": per-leg minutes in route order}. Every day is now a round
+    trip from the user's origin (maintainer decision, 2026-07-24): origin ->
+    stops in order -> origin, so N stops means N+1 legs. The polyline and
+    leg_minutes both come from this same Directions call — the map (ticket
+    #4) and the clock schedule (_build_day_schedule) both reuse it rather
+    than asking the browser or a second call to recompute anything."""
     duration = sum(item["duration_hr"] for item in day_items)
     stop_ids = tuple(item["id"] for item in day_items)
     city = state["city"]
+    # origin_lat/lng are always set by this point: prepare() returns early
+    # with status="no_results" when origin geocoding fails, before the loop
+    # ever starts (same guarantee lat/lng already had for get_weather).
+    assert state["origin_lat"] is not None and state["origin_lng"] is not None
+    origin = (state["origin_lat"], state["origin_lng"])
 
     def _lookup() -> dict:
-        return tools.get_directions(city, day_items)
+        return tools.get_directions(city, origin, day_items)
 
-    directions = state["cache"].get_or_compute(("get_directions", city, stop_ids), _lookup)
-    return {"total": duration + directions["travel_hours"], "polyline": directions.get("polyline")}
+    directions = state["cache"].get_or_compute(("get_directions", origin, stop_ids), _lookup)
+    return {
+        "total": duration + directions["travel_hours"],
+        "polyline": directions.get("polyline"),
+        "leg_minutes": directions.get("leg_minutes") or [],
+    }
 
 
 def _preference_counts(day_allocations: dict[str, list[dict]]) -> dict[str, int]:
@@ -116,6 +142,72 @@ def _all_preferences_covered(state: PlannerState) -> bool:
 
 def _observe(tool: str, result: object, *, success: bool = True, error: str | None = None) -> dict:
     return {"tool": tool, "result": result, "success": success, "error": error}
+
+
+# ---------------------------------------------------------------------------
+# Finalize-time enrichment: descriptions + clock schedule
+# ---------------------------------------------------------------------------
+
+
+def _describe_allocations(day_allocations: dict[str, list[dict]], city: str) -> dict[str, list[dict]]:
+    """Attaches a Gemini-written 50-100-word description to each final stop
+    (maintainer decision, 2026-07-24), once, at finalize time -- never
+    during the trim loop, so a run with many candidates only ever pays for
+    a description on the stops that actually made the final cut. `None`
+    (no key configured, or the call failed) is a valid value the frontend
+    is expected to handle by simply not showing a description for that
+    stop -- same presentation-detail contract as narrate_thought/reflection."""
+    return {
+        day: [
+            {**item, "description": llm.describe_place(item["name"], item["category"], city)} for item in items
+        ]
+        for day, items in day_allocations.items()
+    }
+
+
+def _format_clock(minutes_after_midnight: float) -> str:
+    total = round(minutes_after_midnight)
+    hours, minutes = divmod(total, 60)
+    return f"{hours:02d}:{minutes:02d}"
+
+
+def _build_day_schedule(day_items: list[dict], leg_minutes: list[float]) -> dict:
+    """Walks a day's stops from an 08:00 departure using the real per-leg
+    Directions minutes (origin -> stop 1 -> ... -> stop N -> origin) to
+    produce an arrival/departure clock time per stop and a final
+    return-to-origin time. Purely a display computation on top of numbers
+    already computed for the feasibility check -- it never changes
+    day_totals or over_time_days, just narrates them as a schedule."""
+    elapsed = 0.0
+    stops = []
+    for i, item in enumerate(day_items):
+        elapsed += leg_minutes[i] if i < len(leg_minutes) else 0.0
+        arrival = elapsed
+        elapsed += item["duration_hr"] * 60
+        departure = elapsed
+        stops.append(
+            {
+                "id": item["id"],
+                "arrival": _format_clock(DAY_START_MINUTES + arrival),
+                "departure": _format_clock(DAY_START_MINUTES + departure),
+            }
+        )
+    final_leg = leg_minutes[len(day_items)] if len(leg_minutes) > len(day_items) else 0.0
+    elapsed += final_leg
+    return {"stops": stops, "return_time": _format_clock(DAY_START_MINUTES + elapsed)}
+
+
+def _finalize_enrichment(state: PlannerState) -> dict:
+    """Shared by all three finalize_* nodes: a best-effort itinerary that
+    didn't fully fit is still worth describing and scheduling (maintainer
+    decision, 2026-07-24), same as it's still worth showing on a map and
+    saving -- so this runs for done/infeasible/failed_max_iterations alike."""
+    day_allocations = _describe_allocations(state["day_allocations"], state["city"])
+    day_schedules = {
+        day: _build_day_schedule(day_allocations[day], state["day_leg_minutes"].get(day) or [])
+        for day in day_allocations
+    }
+    return {"day_allocations": day_allocations, "day_schedules": day_schedules}
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +263,7 @@ def act(state: PlannerState) -> dict:
     day_allocations = dict(state["day_allocations"])
     day_totals = dict(state["day_totals"])
     day_polylines = dict(state["day_polylines"])
+    day_leg_minutes = dict(state["day_leg_minutes"])
     over_time_days = list(state["over_time_days"])
     weather_notes = list(state["weather_notes"])
     consecutive_no_improvement = state["consecutive_no_improvement"]
@@ -201,7 +294,8 @@ def act(state: PlannerState) -> dict:
             day_allocations = candidate_allocation
             day_totals = {day: m["total"] for day, m in candidate_metrics.items()}
             day_polylines = {day: m["polyline"] for day, m in candidate_metrics.items()}
-            over_time_days = [d for d, t in day_totals.items() if t > TOURING_HOURS_PER_DAY]
+            day_leg_minutes = {day: m["leg_minutes"] for day, m in candidate_metrics.items()}
+            over_time_days = [d for d, t in day_totals.items() if t > DAY_WINDOW_HOURS]
             observations.append(_observe(tool, {"day_totals": day_totals, "over_time_days": over_time_days}))
 
     elif tool == "trim_worst_day":
@@ -230,17 +324,19 @@ def act(state: PlannerState) -> dict:
                     day_allocations[day] = trimmed_items
                     day_totals[day] = total
                     day_polylines[day] = metrics["polyline"]
+                    day_leg_minutes[day] = metrics["leg_minutes"]
                     consecutive_no_improvement = 0 if total < before else consecutive_no_improvement + 1
                     observations.append(
                         _observe(tool, {"removed": candidate["name"], "day": day, "new_total": total})
                     )
-            over_time_days = [d for d, t in day_totals.items() if t > TOURING_HOURS_PER_DAY]
+            over_time_days = [d for d, t in day_totals.items() if t > DAY_WINDOW_HOURS]
 
     return {
         "observations": observations,
         "day_allocations": day_allocations,
         "day_totals": day_totals,
         "day_polylines": day_polylines,
+        "day_leg_minutes": day_leg_minutes,
         "over_time_days": over_time_days,
         "weather_notes": weather_notes,
         "consecutive_no_improvement": consecutive_no_improvement,
@@ -294,17 +390,18 @@ def finalize_finish(state: PlannerState) -> dict:
     report = "你的行程已經準備好了。"
     if state["weather_notes"]:
         report += " 天氣參考資訊：" + "；".join(state["weather_notes"]) + "。"
-    return {"status": "done", "final_report": report}
+    return {"status": "done", "final_report": report, **_finalize_enrichment(state)}
 
 
 def finalize_infeasible(state: PlannerState) -> dict:
     parts = [
-        f"{d} 超出 {state['day_totals'][d] - TOURING_HOURS_PER_DAY:.1f} 小時"
+        f"{d} 超出 {state['day_totals'][d] - DAY_WINDOW_HOURS:.1f} 小時"
         for d in state["over_time_days"]
     ]
     return {
         "status": "infeasible",
         "final_report": "這個行程安排不下：" + "；".join(parts) + "。試著移除一個偏好或增加一天。",
+        **_finalize_enrichment(state),
     }
 
 
@@ -314,7 +411,7 @@ def finalize_give_up(state: PlannerState) -> dict:
     gaps = []
     if state["over_time_days"]:
         parts = [
-            f"{d} 仍超出 {state['day_totals'][d] - TOURING_HOURS_PER_DAY:.1f} 小時"
+            f"{d} 仍超出 {state['day_totals'][d] - DAY_WINDOW_HOURS:.1f} 小時"
             for d in state["over_time_days"]
         ]
         gaps.append("；".join(parts))
@@ -326,6 +423,7 @@ def finalize_give_up(state: PlannerState) -> dict:
         "final_report": (
             f"已達到 {state['max_iterations']} 次嘗試上限但仍未完成規劃。尚未解決的部分：{gap_text}。"
         ),
+        **_finalize_enrichment(state),
     }
 
 
@@ -412,6 +510,7 @@ def run_planner(request: TripRequest) -> Iterator[dict]:
                         "day_allocations": current.get("day_allocations"),
                         "day_totals": current.get("day_totals"),
                         "day_polylines": current.get("day_polylines"),
+                        "day_schedules": current.get("day_schedules"),
                         "iteration": current["iteration"],
                     },
                 }

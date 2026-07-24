@@ -175,7 +175,42 @@ button:hover {
 
 .day-block ul {
   margin: 0;
-  padding-left: 20px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.day-block li {
+  margin-bottom: 6px;
+}
+
+.day-block details {
+  border-radius: 10px;
+  background: #f6fbff;
+  padding: 8px 12px;
+}
+
+.day-block summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.day-block summary::marker {
+  color: var(--sky);
+}
+
+.stop-description {
+  margin: 8px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line-soft, #e5ddd4);
+  color: #5a4d47;
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+.day-return-note {
+  margin: 10px 0 0;
+  color: #8a7a6d;
+  font-size: 0.9rem;
 }
 
 #map-section {
@@ -433,6 +468,19 @@ button:hover {
 .export-stop span {
   color: #8a7a6d;
   font-size: 0.85rem;
+}
+
+.export-stop-description {
+  margin: 4px 0 0;
+  color: #5a4d47;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.export-return-note {
+  margin: 10px 0 0;
+  color: #8a7a6d;
+  font-size: 0.9rem;
 }
 
 @media print {

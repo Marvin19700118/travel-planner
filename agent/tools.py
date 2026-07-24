@@ -174,19 +174,28 @@ def get_weather(city: str, lat: float, lng: float, dates: list[str]) -> list[dic
     return results
 
 
-def get_directions(city: str, stops: list[dict]) -> dict:
+def get_directions(city: str, origin: tuple[float, float], stops: list[dict]) -> dict:
+    """Every day is now a round trip from `origin` (maintainer decision,
+    2026-07-24): origin -> stops in order -> back to origin, so a day with N
+    stops always has N+1 Directions legs. `leg_minutes` preserves each leg's
+    own duration (not just the aggregate `travel_hours`) so
+    agent/graph.py's _build_day_schedule can walk them into real
+    arrival/departure clock times starting from 08:00."""
     if _test_mode():
-        return fixtures.get_directions(city, stops)
+        return fixtures.get_directions(city, origin, stops)
 
-    if len(stops) < 2:
-        return {"travel_hours": 0.0, "polyline": None}
+    if not stops:
+        return {"travel_hours": 0.0, "leg_minutes": [], "polyline": None}
 
     key = _require_api_key()
-    origin = f"{stops[0]['lat']},{stops[0]['lng']}"
-    destination = f"{stops[-1]['lat']},{stops[-1]['lng']}"
-    params: dict[str, str] = {"origin": origin, "destination": destination, "mode": "driving", "key": key}
-    if len(stops) > 2:
-        params["waypoints"] = "|".join(f"{s['lat']},{s['lng']}" for s in stops[1:-1])
+    origin_str = f"{origin[0]},{origin[1]}"
+    params: dict[str, str] = {
+        "origin": origin_str,
+        "destination": origin_str,
+        "mode": "driving",
+        "key": key,
+        "waypoints": "|".join(f"{s['lat']},{s['lng']}" for s in stops),
+    }
 
     response = httpx.get(_DIRECTIONS_URL, params=params, timeout=_REQUEST_TIMEOUT_SECONDS)
     response.raise_for_status()
@@ -195,9 +204,10 @@ def get_directions(city: str, stops: list[dict]) -> dict:
         raise RuntimeError(f"Directions API returned no route between the selected stops in {city}")
 
     legs = routes[0].get("legs") or []
+    leg_minutes = [leg["duration"]["value"] / 60 for leg in legs]
     total_seconds = sum(leg["duration"]["value"] for leg in legs)
     polyline = (routes[0].get("overview_polyline") or {}).get("points")
-    return {"travel_hours": total_seconds / 3600, "polyline": polyline}
+    return {"travel_hours": total_seconds / 3600, "leg_minutes": leg_minutes, "polyline": polyline}
 
 
 def get_photo_bytes(photo_reference: str) -> bytes | None:

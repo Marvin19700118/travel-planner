@@ -49,6 +49,9 @@ class PlanRequest(BaseModel):
     start_date: str
     days: int = Field(ge=1)
     preferences: list[str] = Field(min_length=1)
+    # Free-text address; every day's route now starts and ends there
+    # (maintainer decision, 2026-07-24), geocoded the same way city is.
+    origin: str = Field(min_length=1)
 
 
 def execute_run(run_id: str, request: PlanRequest, queue: asyncio.Queue, loop: asyncio.AbstractEventLoop) -> None:
@@ -69,7 +72,11 @@ def execute_run(run_id: str, request: PlanRequest, queue: asyncio.Queue, loop: a
         loop.call_soon_threadsafe(queue.put_nowait, event)
 
     trip = TripRequest(
-        city=request.city, start_date=request.start_date, days=request.days, preferences=request.preferences
+        city=request.city,
+        start_date=request.start_date,
+        days=request.days,
+        preferences=request.preferences,
+        origin=request.origin,
     )
     try:
         for event in run_planner(trip):
@@ -104,6 +111,7 @@ def execute_run(run_id: str, request: PlanRequest, queue: asyncio.Queue, loop: a
                     request.start_date,
                     final_content["day_allocations"],
                     final_content.get("day_polylines") or {},
+                    final_content.get("day_schedules") or {},
                     final_content["status"],
                 )
             except Exception:

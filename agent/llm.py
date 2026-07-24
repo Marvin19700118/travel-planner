@@ -87,6 +87,23 @@ def narrate_reflection(context: str, fallback: str) -> str:
     )
 
 
+def describe_place(name: str, category: str, city: str) -> str | None:
+    """Returns a 50-100-word Traditional Chinese introduction to a specific
+    attraction (maintainer decision, 2026-07-24), or None if no key is
+    configured or the call fails for any reason -- callers are expected to
+    simply not show a description in that case, the same presentation-
+    detail contract as narrate_thought/narrate_reflection."""
+    if not is_available():
+        return None
+    try:
+        return _generate(
+            f"請用 50 到 100 字的繁體中文，簡單介紹「{city}」的景點「{name}」（類別：{category}）。"
+            "語氣輕鬆自然，適合放在旅遊行程介紹裡，不要條列、不要標題，直接給一段介紹文字。"
+        )
+    except Exception:
+        return None
+
+
 def _generate_image(prompt: str) -> bytes | None:
     from google import genai
     from google.genai import types

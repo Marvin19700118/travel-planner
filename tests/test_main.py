@@ -49,7 +49,7 @@ def test_config_keys_are_independent_of_each_other(client, monkeypatch):
 def test_start_plan_returns_a_run_id(client):
     response = client.post(
         "/api/plan",
-        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+        json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
     )
 
     assert response.status_code == 200
@@ -59,7 +59,7 @@ def test_start_plan_returns_a_run_id(client):
 def test_stream_delivers_events_ending_in_final(client):
     run_id = client.post(
         "/api/plan",
-        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+        json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
     ).json()["run_id"]
 
     events = _collect_sse_events(client, run_id)
@@ -77,7 +77,7 @@ def test_streaming_an_unknown_run_id_returns_404(client):
 def test_replay_returns_the_persisted_record_after_a_run_completes(client):
     run_id = client.post(
         "/api/plan",
-        json={"city": "sprawlville", "start_date": "2026-08-01", "days": 1, "preferences": ["hiking", "golf"]},
+        json={"city": "sprawlville", "origin": "sprawlville", "start_date": "2026-08-01", "days": 1, "preferences": ["hiking", "golf"]},
     ).json()["run_id"]
     _collect_sse_events(client, run_id)  # drain the stream so the run finishes and persists
 
@@ -98,13 +98,13 @@ def test_replay_of_unknown_run_id_returns_404(client):
 def test_get_runs_lists_every_past_run_regardless_of_outcome(client):
     done_id = client.post(
         "/api/plan",
-        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+        json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
     ).json()["run_id"]
     _collect_sse_events(client, done_id)
 
     infeasible_id = client.post(
         "/api/plan",
-        json={"city": "sprawlville", "start_date": "2026-08-01", "days": 1, "preferences": ["hiking", "golf"]},
+        json={"city": "sprawlville", "origin": "sprawlville", "start_date": "2026-08-01", "days": 1, "preferences": ["hiking", "golf"]},
     ).json()["run_id"]
     _collect_sse_events(client, infeasible_id)
 
@@ -122,7 +122,7 @@ def test_a_successful_run_is_auto_saved_as_a_trip(client):
 
     run_id = client.post(
         "/api/plan",
-        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+        json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
     ).json()["run_id"]
     _collect_sse_events(client, run_id)
 
@@ -143,7 +143,7 @@ def test_an_infeasible_run_with_a_day_allocation_is_still_saved_as_a_trip(client
 
     run_id = client.post(
         "/api/plan",
-        json={"city": "sprawlville", "start_date": "2026-08-01", "days": 1, "preferences": ["hiking", "golf"]},
+        json={"city": "sprawlville", "origin": "sprawlville", "start_date": "2026-08-01", "days": 1, "preferences": ["hiking", "golf"]},
     ).json()["run_id"]
     _collect_sse_events(client, run_id)
 
@@ -159,7 +159,7 @@ def test_a_no_results_run_has_nothing_to_save_and_is_not_saved_as_a_trip(client)
 
     run_id = client.post(
         "/api/plan",
-        json={"city": "emptyville", "start_date": "2026-08-01", "days": 1, "preferences": ["museum"]},
+        json={"city": "emptyville", "origin": "emptyville", "start_date": "2026-08-01", "days": 1, "preferences": ["museum"]},
     ).json()["run_id"]
     _collect_sse_events(client, run_id)
 
@@ -171,7 +171,7 @@ def test_a_saved_trips_attractions_have_a_real_photo_url(client):
 
     run_id = client.post(
         "/api/plan",
-        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+        json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
     ).json()["run_id"]
     _collect_sse_events(client, run_id)
 
@@ -185,10 +185,11 @@ def test_a_saved_trips_attractions_have_a_real_photo_url(client):
 def test_get_trip_endpoint_returns_the_saved_record_including_day_polylines(client):
     run_id = client.post(
         "/api/plan",
-        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+        json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
     ).json()["run_id"]
     events = _collect_sse_events(client, run_id)
     final_day_polylines = events[-1]["content"]["day_polylines"]
+    final_day_schedules = events[-1]["content"]["day_schedules"]
 
     response = client.get(f"/api/trips/{run_id}")
 
@@ -197,6 +198,8 @@ def test_get_trip_endpoint_returns_the_saved_record_including_day_polylines(clie
     assert body["trip_id"] == run_id
     assert body["day_polylines"] == final_day_polylines
     assert any(body["day_polylines"].values()), "expected at least one day to have a real polyline"
+    assert body["day_schedules"] == final_day_schedules
+    assert any(body["day_schedules"].values()), "expected at least one day to have a real clock schedule"
 
 
 def test_get_trip_endpoint_returns_404_for_unknown_trip(client):
@@ -207,7 +210,7 @@ def test_get_trip_endpoint_returns_404_for_unknown_trip(client):
 def test_get_trips_endpoint_returns_saved_trips(client):
     run_id = client.post(
         "/api/plan",
-        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+        json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
     ).json()["run_id"]
     _collect_sse_events(client, run_id)
 
@@ -222,7 +225,7 @@ def test_get_trips_endpoint_returns_saved_trips(client):
 def test_delete_trip_endpoint_removes_it_and_its_images(client):
     run_id = client.post(
         "/api/plan",
-        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+        json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
     ).json()["run_id"]
     _collect_sse_events(client, run_id)
     cover_url = client.get("/api/trips").json()[0]["cover_image_url"]
@@ -242,7 +245,7 @@ def test_delete_unknown_trip_returns_404(client):
 def test_trip_image_endpoint_serves_the_saved_bytes(client):
     run_id = client.post(
         "/api/plan",
-        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+        json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
     ).json()["run_id"]
     _collect_sse_events(client, run_id)
     cover_url = client.get("/api/trips").json()[0]["cover_image_url"]
@@ -270,7 +273,7 @@ def test_trip_image_path_traversal_is_rejected(client, tmp_path):
 def test_invalid_request_is_rejected_before_a_run_starts(client):
     response = client.post(
         "/api/plan",
-        json={"city": "testville", "start_date": "2026-08-01", "days": 0, "preferences": []},
+        json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 0, "preferences": []},
     )
     assert response.status_code == 422
 
@@ -290,7 +293,7 @@ def test_a_persistent_tool_failure_degrades_to_a_terminal_state_not_a_crash(tmp_
     with TestClient(main.app) as client:
         run_id = client.post(
             "/api/plan",
-            json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+            json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
         ).json()["run_id"]
 
         events = _collect_sse_events(client, run_id)
@@ -316,7 +319,7 @@ def test_a_truly_unexpected_exception_during_a_run_ends_gracefully_not_with_a_cr
     with TestClient(main.app) as client:
         run_id = client.post(
             "/api/plan",
-            json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+            json={"city": "testville", "origin": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
         ).json()["run_id"]
 
         events = _collect_sse_events(client, run_id)

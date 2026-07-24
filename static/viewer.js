@@ -74,7 +74,29 @@ function describeEvent(event) {
   }
 }
 
-function renderItinerary(dayAllocations) {
+function renderStopItem(stop, schedule) {
+  // <details> gives click-to-expand for free (native, accessible, no extra
+  // click-state bookkeeping) -- the summary line always shows the real
+  // 08:00-start clock times (maintainer decision, 2026-07-24); expanding it
+  // shows the Gemini-written description when one was generated, or a
+  // plain notice when it wasn't (no key configured, or the call failed --
+  // same presentation-detail contract as narrate_thought/reflection).
+  const li = document.createElement("li");
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  const preferenceLabel = PREFERENCE_LABELS[stop.preference] || stop.preference;
+  const timeRange = schedule ? `${schedule.arrival}–${schedule.departure}　` : "";
+  summary.textContent = `${timeRange}${stop.name}（${stop.duration_hr} 小時，${preferenceLabel}）`;
+  const description = document.createElement("p");
+  description.className = "stop-description";
+  description.textContent = stop.description || "（目前沒有這個景點的介紹文字）";
+  details.appendChild(summary);
+  details.appendChild(description);
+  li.appendChild(details);
+  return li;
+}
+
+function renderItinerary(dayAllocations, daySchedules) {
   itineraryEl.innerHTML = "";
   if (!dayAllocations) return;
   Object.keys(dayAllocations)
@@ -85,14 +107,19 @@ function renderItinerary(dayAllocations) {
       const heading = document.createElement("h3");
       heading.textContent = day;
       const list = document.createElement("ul");
-      dayAllocations[day].forEach((stop) => {
-        const li = document.createElement("li");
-        const preferenceLabel = PREFERENCE_LABELS[stop.preference] || stop.preference;
-        li.textContent = `${stop.name}（${stop.duration_hr} 小時，${preferenceLabel}）`;
-        list.appendChild(li);
+      const schedule = daySchedules ? daySchedules[day] : null;
+      dayAllocations[day].forEach((stop, index) => {
+        const stopSchedule = schedule ? schedule.stops[index] : null;
+        list.appendChild(renderStopItem(stop, stopSchedule));
       });
       block.appendChild(heading);
       block.appendChild(list);
+      if (schedule) {
+        const returnNote = document.createElement("p");
+        returnNote.className = "day-return-note";
+        returnNote.textContent = `${schedule.return_time} 返回出發地點`;
+        block.appendChild(returnNote);
+      }
       itineraryEl.appendChild(block);
     });
 }
@@ -102,7 +129,7 @@ function showResult(finalContent) {
   resultView.className = `card status-${finalContent.status}`;
   resultTitle.textContent = STATUS_TITLES[finalContent.status] || "Result";
   resultMessage.textContent = finalContent.final_report;
-  renderItinerary(finalContent.day_allocations);
+  renderItinerary(finalContent.day_allocations, finalContent.day_schedules);
 
   // Show the map whenever there's an actual day allocation to draw, not
   // just for a fully-fit "done" result -- a best-effort infeasible/
@@ -162,8 +189,9 @@ function renderDay(day, dayAllocations, dayPolylines) {
   stops.forEach((stop) => {
     const position = { lat: stop.lat, lng: stop.lng };
     const marker = new google.maps.Marker({ position, map, title: stop.name });
+    const descriptionHtml = stop.description ? `<br>${stop.description}` : "";
     const infoWindow = new google.maps.InfoWindow({
-      content: `<strong>${stop.name}</strong><br>${stop.address || ""}<br>${stop.duration_hr} 小時`,
+      content: `<strong>${stop.name}</strong><br>${stop.address || ""}<br>${stop.duration_hr} 小時${descriptionHtml}`,
     });
     marker.addListener("click", () => infoWindow.open(map, marker));
     activeOverlays.push(marker);

@@ -18,6 +18,7 @@ form.addEventListener("submit", async (submitEvent) => {
   const preferences = formData.getAll("preferences");
   const body = {
     city: formData.get("city"),
+    origin: formData.get("origin"),
     start_date: formData.get("start_date"),
     days: Number(formData.get("days")),
     preferences,

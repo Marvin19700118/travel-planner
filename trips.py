@@ -54,7 +54,14 @@ def _fetch_photo_bytes(photo_reference: str | None) -> bytes | None:
 
 
 def save_completed_trip(
-    trip_id: str, city: str, days: int, start_date: str, day_allocations: dict, day_polylines: dict, status: str
+    trip_id: str,
+    city: str,
+    days: int,
+    start_date: str,
+    day_allocations: dict,
+    day_polylines: dict,
+    day_schedules: dict,
+    status: str,
 ) -> None:
     """Called once a run has produced a real day allocation, whether or not
     it fully fit the touring budget (maintainer decision, 2026-07-24: a
@@ -67,7 +74,9 @@ def save_completed_trip(
     saved trip later never re-triggers one. day_polylines is stored verbatim
     (already computed by the same Directions call the touring-budget check
     made) so the one-page export view (#8) can render a static map per day
-    without a new route-calculation call."""
+    without a new route-calculation call. day_schedules (the 08:00-start
+    arrival/departure clock times, one entry per day) is likewise stored
+    verbatim rather than recomputed."""
     enriched_allocations: dict[str, list[dict]] = {}
     fallback_cover_bytes: bytes | None = None
 
@@ -95,5 +104,6 @@ def save_completed_trip(
             "cover_image_url": cover_image_url,
             "day_allocations": enriched_allocations,
             "day_polylines": day_polylines,
+            "day_schedules": day_schedules,
         },
     )

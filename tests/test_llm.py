@@ -107,3 +107,42 @@ def test_generate_cover_image_returns_none_if_no_image_part_found(monkeypatch):
     monkeypatch.setattr(llm, "_generate_image", lambda prompt: None)
 
     assert llm.generate_cover_image("Paris") is None
+
+
+def test_describe_place_returns_none_when_no_key(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert llm.describe_place("Louvre", "museum", "Paris") is None
+
+
+def test_describe_place_returns_generated_text_when_available(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+    monkeypatch.setattr(llm, "_generate", lambda prompt: "羅浮宮是世界知名的博物館。")
+
+    assert llm.describe_place("Louvre", "museum", "Paris") == "羅浮宮是世界知名的博物館。"
+
+
+def test_describe_place_prompt_includes_the_place_category_and_city(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+    captured = {}
+
+    def fake_generate(prompt):
+        captured["prompt"] = prompt
+        return "description"
+
+    monkeypatch.setattr(llm, "_generate", fake_generate)
+    llm.describe_place("Louvre", "museum", "Paris")
+
+    assert "Louvre" in captured["prompt"]
+    assert "museum" in captured["prompt"]
+    assert "Paris" in captured["prompt"]
+
+
+def test_describe_place_returns_none_if_generation_raises(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+
+    def boom(prompt):
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(llm, "_generate", boom)
+
+    assert llm.describe_place("Louvre", "museum", "Paris") is None

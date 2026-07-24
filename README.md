@@ -10,6 +10,8 @@ Implemented so far: [#2](https://github.com/Marvin19700118/travel-planner/issues
 
 **Maintainer decision, 2026-07-24 — a best-effort itinerary is still worth keeping:** originally, only a fully-fit `done` run got its map shown and got saved to the trips list; `infeasible`/`failed_max_iterations` runs were only viewable through replay (#9). That turned out too strict in practice — an itinerary that hit the 8-iteration cap while still 2 hours over budget on one day is still a real, mostly-useful plan. Now *any* run that produced a real day allocation gets its map shown (`static/viewer.js`'s `showResult`) and gets saved (`main.py`'s `execute_run`), whatever its status — the status itself is stored and shown honestly (`已用完嘗試次數`/`不合適` badges on `trips.html`, not silently relabeled `done`). Only `no_results` stays excluded, since it never has a day allocation to show in the first place.
 
+**Maintainer decision, 2026-07-24 — every day is a round trip from a real origin, on a real clock:** the request now takes a free-text `origin` address (geocoded the same way as `city`), and every day's route is built as `origin → stop 1 → ... → stop N → origin` rather than a bare sequence of stops. The old abstract `TOURING_HOURS_PER_DAY = 8.0` budget is fully replaced by `DAY_WINDOW_HOURS = 12.0`, anchored to an 08:00 departure — the same "stop duration + travel time" total that was already being checked, just against a threshold with real clock meaning (must be back by 20:00) instead of an abstract number. `agent/graph.py`'s `_build_day_schedule` walks each day's real per-leg Directions minutes from 08:00 to produce an arrival/departure time per stop and a final return-to-origin time, purely as a display computation layered on top of the existing feasibility numbers — it never feeds back into the trim loop. Each stop also gets a Gemini-generated 50-100 word Traditional Chinese description (`agent/llm.py`'s `describe_place`, same None-on-no-key/failure contract as the existing narration functions), shown in both the interactive map's marker `InfoWindow` and a click-to-expand (`<details>`) row in the text itinerary — and both the schedule and the description are computed once at finalize time (not during the trim loop) and stored verbatim on the saved trip, so the export page (#8) renders them with no new calls either.
+
 ## Setup
 
 ```bash
@@ -51,15 +53,16 @@ set GEMINI_API_KEY=your-key
 .venv\Scripts\python.exe -m uvicorn main:app --reload
 ```
 
-In `TEST_MODE=true`, try these city names in the form to exercise each terminal state:
+In `TEST_MODE=true`, try these city names in the form to exercise each terminal state. **`prepare()` geocodes `origin` the same way it geocodes `city`** — since `TEST_MODE`'s fixture geocoder only recognizes the four names below, `origin` must be set to one of them too (typically the same value as `city`), or the run short-circuits to `no_results` with an origin-specific message before the city is even looked up:
 
-| City | Preferences to select | Days | Outcome |
-|---|---|---|---|
-| `testville` | museum, food | 2 | `done` |
-| `sprawlville` | hiking, golf | 1 | `infeasible` |
-| `emptyville` | anything | 1 | `no_results` |
-| `loopville` | food | 1 | `failed_max_iterations` |
-| any other name | anything | any | `no_results` (unrecognized city) |
+| City | Origin | Preferences to select | Days | Outcome |
+|---|---|---|---|---|
+| `testville` | `testville` | museum, food | 2 | `done` |
+| `sprawlville` | `sprawlville` | hiking, golf | 1 | `infeasible` |
+| `emptyville` | `emptyville` | anything | 1 | `no_results` |
+| `loopville` | `loopville` | food | 1 | `failed_max_iterations` |
+| any other name | any recognized name | anything | any | `no_results` (unrecognized city) |
+| any recognized name | any other name | anything | any | `no_results` (unrecognized origin) |
 
 ## Deployment
 
@@ -124,19 +127,19 @@ All tests run without any real key: the fixture tests set `TEST_MODE=true`, and 
 - `agent/state.py` — `PlannerState`, `TripRequest`, and `RunCache` (the per-run tool-call memo)
 - `agent/tools.py` — the single seam: `TEST_MODE` switches every external call between fixtures and a real HTTP implementation
 - `agent/fixtures.py` — the four scenario fixtures described above
-- `agent/llm.py` — Gemini-backed Thought/Reflection narration, with a deterministic fallback when no key is set (tool *selection* always stays deterministic — see the module docstring)
-- `agent/graph.py` — the LangGraph loop (`think` → `act` → `reflect` → route) and the `run_planner()` generator that drives it
+- `agent/llm.py` — Gemini-backed Thought/Reflection narration and per-place descriptions (`describe_place`), with a deterministic fallback / `None` when no key is set (tool *selection* always stays deterministic — see the module docstring)
+- `agent/graph.py` — the LangGraph loop (`think` → `act` → `reflect` → route) and the `run_planner()` generator that drives it; also builds the 08:00-anchored per-day clock schedule and attaches descriptions at finalize time
 - `storage.py` — local JSONL run persistence (**not yet Firestore** — see "Deployment")
-- `trips.py` — local JSON persistence for auto-saved completed trips, plus the enrichment step that fetches real attraction photos and the AI cover image; also stores `day_polylines` verbatim so the export page (#8) never needs a new Directions call (**not yet Firestore** — see "Deployment")
+- `trips.py` — local JSON persistence for auto-saved completed trips, plus the enrichment step that fetches real attraction photos and the AI cover image; also stores `day_polylines` and `day_schedules` verbatim so the export page (#8) never needs a new Directions/Gemini call (**not yet Firestore** — see "Deployment")
 - `image_store.py` — local filesystem storage for attraction/cover photos (**not yet Firebase Storage** — see "Deployment")
 - `auth.py` — the shared-password gate (cookie check, login page, login handler)
 - `main.py` — FastAPI app: the password middleware, `POST /api/plan`, `GET /api/plan/{run_id}/stream` (SSE), `GET /api/plan/{run_id}/replay`, `GET /api/runs`, `GET /api/config`, `GET /api/trips`, `GET /api/trips/{trip_id}`, `DELETE /api/trips/{trip_id}`, `GET /images/{trip_id}/{filename}`, `POST /login`
 - `static/` — the plain HTML/CSS/JS frontend, responsive down to a 375px mobile viewport
-- `static/viewer.js` — rendering shared by the live view and the replay view (step list, result, interactive map) so the two can never visually drift apart
+- `static/viewer.js` — rendering shared by the live view and the replay view (step list, result, interactive map) so the two can never visually drift apart; each stop's clock time and description render in a click-to-expand row and in the map marker's `InfoWindow`
 - `static/trips.html`, `static/trips.js` — the saved-trips list page (cover image, city, day count, delete, export link)
 - `static/runs.html`, `static/runs.js` — every past run regardless of outcome, each linking to its replay (ticket #9)
 - `static/replay.html`, `static/replay.js` — steps a stored run's events through `viewer.js`'s rendering with a short delay between steps; makes no calls to any external place/weather/route/LLM service, only to this app's own `/api/plan/{run_id}/replay`
-- `static/export.html`, `static/export.js` — one-page printable itinerary: cover image, day-by-day stops with real thumbnails, one Static Maps API image per day (ticket #8)
+- `static/export.html`, `static/export.js` — one-page printable itinerary: cover image, day-by-day stops with real thumbnails, each stop's clock time and description, the day's return time, and one Static Maps API image per day (ticket #8)
 - `static/manifest.json`, `static/icon-*.png` — PWA manifest and icons (a simple sun mark on coral, matching the visual language)
 - `static/sw.js` — service worker caching the static shell only (never API responses); see the `CACHE_NAME` note above
 - `Dockerfile`, `.dockerignore` — Cloud Run container build (not yet build-tested — no local Docker)

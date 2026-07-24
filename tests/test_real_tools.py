@@ -141,14 +141,18 @@ def test_get_weather_parses_forecast_days(monkeypatch):
 def test_get_directions_sums_leg_durations_and_returns_the_polyline(monkeypatch):
     def fake_get(url, params, timeout):
         assert url == tools._DIRECTIONS_URL
-        assert params["origin"] == "1.0,1.0"
-        assert params["destination"] == "3.0,3.0"
-        assert params["waypoints"] == "2.0,2.0"
+        assert params["origin"] == "0.0,0.0"
+        assert params["destination"] == "0.0,0.0"
+        assert params["waypoints"] == "1.0,1.0|2.0,2.0"
         return _fake_response(
             {
                 "routes": [
                     {
-                        "legs": [{"duration": {"value": 1800}}, {"duration": {"value": 3600}}],
+                        "legs": [
+                            {"duration": {"value": 1800}},
+                            {"duration": {"value": 3600}},
+                            {"duration": {"value": 900}},
+                        ],
                         "overview_polyline": {"points": "encoded-polyline"},
                     }
                 ]
@@ -157,20 +161,21 @@ def test_get_directions_sums_leg_durations_and_returns_the_polyline(monkeypatch)
 
     monkeypatch.setattr(tools.httpx, "get", fake_get)
 
-    stops = [{"id": "a", "lat": 1.0, "lng": 1.0}, {"id": "b", "lat": 2.0, "lng": 2.0}, {"id": "c", "lat": 3.0, "lng": 3.0}]
-    result = tools.get_directions("Paris", stops)
+    stops = [{"id": "a", "lat": 1.0, "lng": 1.0}, {"id": "b", "lat": 2.0, "lng": 2.0}]
+    result = tools.get_directions("Paris", (0.0, 0.0), stops)
 
-    assert result == {"travel_hours": 1.5, "polyline": "encoded-polyline"}
+    assert result == {"travel_hours": 1.75, "leg_minutes": [30.0, 60.0, 15.0], "polyline": "encoded-polyline"}
 
 
-def test_get_directions_with_a_single_stop_needs_no_call(monkeypatch):
+def test_get_directions_with_no_stops_needs_no_call(monkeypatch):
     def fail(*args, **kwargs):
-        raise AssertionError("should not call the Directions API for fewer than 2 stops")
+        raise AssertionError("should not call the Directions API for zero stops")
 
     monkeypatch.setattr(tools.httpx, "get", fail)
 
-    assert tools.get_directions("Paris", [{"id": "a", "lat": 1.0, "lng": 1.0}]) == {
+    assert tools.get_directions("Paris", (0.0, 0.0), []) == {
         "travel_hours": 0.0,
+        "leg_minutes": [],
         "polyline": None,
     }
 
@@ -180,7 +185,7 @@ def test_get_directions_raises_a_clear_error_when_no_route_is_found(monkeypatch)
     stops = [{"id": "a", "lat": 1.0, "lng": 1.0}, {"id": "b", "lat": 2.0, "lng": 2.0}]
 
     with pytest.raises(RuntimeError, match="no route"):
-        tools.get_directions("Paris", stops)
+        tools.get_directions("Paris", (0.0, 0.0), stops)
 
 
 def test_get_photo_bytes_fetches_and_follows_redirects(monkeypatch):
