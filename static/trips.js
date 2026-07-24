@@ -24,6 +24,11 @@ function renderTripCard(trip) {
   const meta = document.createElement("p");
   meta.textContent = `${dayCountLabel(trip.days)} · ${trip.start_date}`;
 
+  const exportLink = document.createElement("a");
+  exportLink.href = `/export.html?trip_id=${encodeURIComponent(trip.trip_id)}`;
+  exportLink.className = "trip-export";
+  exportLink.textContent = "Export";
+
   const deleteButton = document.createElement("button");
   deleteButton.textContent = "Delete";
   deleteButton.className = "trip-delete";
@@ -53,6 +58,7 @@ function renderTripCard(trip) {
 
   info.appendChild(title);
   info.appendChild(meta);
+  info.appendChild(exportLink);
   info.appendChild(deleteButton);
   card.appendChild(img);
   card.appendChild(info);

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#ff8c66" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Travel Planner" />
+  <title>Replay — Travel Planner</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" href="/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>Replaying a past run</h1>
+    <p><a href="/runs.html">&larr; Back to past runs</a></p>
+
+    <p id="replay-error" class="hidden error-text"></p>
+
+    <section id="live-view" class="card hidden">
+      <h2>Replaying the agent's steps&hellip;</h2>
+      <ol id="step-list"></ol>
+    </section>
+
+    <section id="result-view" class="card hidden">
+      <h2 id="result-title"></h2>
+      <p id="result-message"></p>
+      <div id="itinerary"></div>
+      <div id="map-section" class="hidden">
+        <div id="map-tabs" role="tablist"></div>
+        <div id="map"></div>
+        <p id="map-unavailable" class="hidden">Map isn't configured on this deployment yet.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="viewer.js"></script>
+  <script src="replay.js"></script>
+</body>
+</html>

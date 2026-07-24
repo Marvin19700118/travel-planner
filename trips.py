@@ -26,6 +26,13 @@ def list_trips() -> list[dict]:
     return [json.loads(path.read_text(encoding="utf-8")) for path in sorted(TRIPS_DIR.glob("*.json"))]
 
 
+def get_trip(trip_id: str) -> dict | None:
+    path = TRIPS_DIR / f"{trip_id}.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def delete_trip(trip_id: str) -> bool:
     path = TRIPS_DIR / f"{trip_id}.json"
     if not path.exists():
@@ -46,11 +53,16 @@ def _fetch_photo_bytes(photo_reference: str | None) -> bytes | None:
         return None
 
 
-def save_completed_trip(trip_id: str, city: str, days: int, start_date: str, day_allocations: dict) -> None:
+def save_completed_trip(
+    trip_id: str, city: str, days: int, start_date: str, day_allocations: dict, day_polylines: dict
+) -> None:
     """Called once, when a run reaches status=="done". Fetches a real photo
     per attraction and generates (or falls back for) an AI cover image --
     every image lookup happens here, exactly once; viewing the saved trip
-    later never re-triggers one."""
+    later never re-triggers one. day_polylines is stored verbatim (already
+    computed by the same Directions call the touring-budget check made) so
+    the one-page export view (#8) can render a static map per day without
+    a new route-calculation call."""
     enriched_allocations: dict[str, list[dict]] = {}
     fallback_cover_bytes: bytes | None = None
 
@@ -76,5 +88,6 @@ def save_completed_trip(trip_id: str, city: str, days: int, start_date: str, day
             "start_date": start_date,
             "cover_image_url": cover_image_url,
             "day_allocations": enriched_allocations,
+            "day_polylines": day_polylines,
         },
     )

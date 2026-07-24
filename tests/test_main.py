@@ -87,6 +87,28 @@ def test_replay_of_unknown_run_id_returns_404(client):
     assert response.status_code == 404
 
 
+def test_get_runs_lists_every_past_run_regardless_of_outcome(client):
+    done_id = client.post(
+        "/api/plan",
+        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+    ).json()["run_id"]
+    _collect_sse_events(client, done_id)
+
+    infeasible_id = client.post(
+        "/api/plan",
+        json={"city": "sprawlville", "start_date": "2026-08-01", "days": 1, "preferences": ["hiking", "golf"]},
+    ).json()["run_id"]
+    _collect_sse_events(client, infeasible_id)
+
+    runs = client.get("/api/runs").json()
+    run_ids = {r["run_id"] for r in runs}
+
+    assert run_ids == {done_id, infeasible_id}
+    statuses = {r["run_id"]: r["status"] for r in runs}
+    assert statuses[done_id] == "done"
+    assert statuses[infeasible_id] == "infeasible"
+
+
 def test_a_successful_run_is_auto_saved_as_a_trip(client):
     import trips as trips_module
 
@@ -130,6 +152,28 @@ def test_a_saved_trips_attractions_have_a_real_photo_url(client):
 
     assert all_stops, "expected at least one attraction in the saved trip"
     assert all(stop["photo_url"] is not None for stop in all_stops)
+
+
+def test_get_trip_endpoint_returns_the_saved_record_including_day_polylines(client):
+    run_id = client.post(
+        "/api/plan",
+        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+    ).json()["run_id"]
+    events = _collect_sse_events(client, run_id)
+    final_day_polylines = events[-1]["content"]["day_polylines"]
+
+    response = client.get(f"/api/trips/{run_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["trip_id"] == run_id
+    assert body["day_polylines"] == final_day_polylines
+    assert any(body["day_polylines"].values()), "expected at least one day to have a real polyline"
+
+
+def test_get_trip_endpoint_returns_404_for_unknown_trip(client):
+    response = client.get("/api/trips/does-not-exist")
+    assert response.status_code == 404
 
 
 def test_get_trips_endpoint_returns_saved_trips(client):

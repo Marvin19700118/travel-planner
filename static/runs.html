@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Travel Planner" />
-  <title>Saved Trips — Travel Planner</title>
+  <title>Past Runs — Travel Planner</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon-192.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
@@ -15,14 +15,14 @@
 </head>
 <body>
   <main class="page">
-    <h1>Saved trips</h1>
-    <p><a href="/">&larr; Plan a new trip</a> &middot; <a href="/runs.html">View past runs &rarr;</a></p>
+    <h1>Past runs</h1>
+    <p><a href="/">&larr; Plan a new trip</a> &middot; <a href="/trips.html">View saved trips &rarr;</a></p>
 
-    <p id="trips-error" class="hidden error-text"></p>
-    <div id="trips-list"></div>
-    <p id="trips-empty" class="hidden">No saved trips yet — plan one and it'll show up here.</p>
+    <p id="runs-error" class="hidden error-text"></p>
+    <div id="runs-list"></div>
+    <p id="runs-empty" class="hidden">No runs yet — plan a trip and it'll show up here, whatever the outcome.</p>
   </main>
 
-  <script src="trips.js"></script>
+  <script src="runs.js"></script>
 </body>
 </html>

@@ -265,6 +265,15 @@ button:hover {
   font-size: 0.9rem;
 }
 
+.trip-export {
+  display: inline-block;
+  color: var(--coral);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-decoration: none;
+  margin-right: 10px;
+}
+
 .trip-delete {
   background: #fff;
   color: #d64545;
@@ -288,6 +297,159 @@ button:hover {
   font-weight: 600;
 }
 
+/* --- Past runs (ticket #9) ------------------------------------------- */
+
+#runs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.run-card {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  padding: 14px;
+}
+
+.run-info h3 {
+  margin: 0 0 4px;
+}
+
+.run-info p {
+  margin: 0 0 8px;
+  color: #8a7a6d;
+  font-size: 0.9rem;
+}
+
+.run-status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #f7f2ea;
+  color: #8a7a6d;
+}
+
+.run-status-done {
+  background: #eafaf0;
+  color: #2f8a55;
+}
+
+.run-status-infeasible,
+.run-status-no_results,
+.run-status-failed_max_iterations {
+  background: #fff8e8;
+  color: #b3821a;
+}
+
+.run-replay {
+  flex-shrink: 0;
+  color: var(--coral);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+#runs-empty {
+  color: #8a7a6d;
+  margin-top: 16px;
+}
+
+/* --- One-page export (ticket #8) ------------------------------------- */
+
+.no-print button {
+  margin-top: 10px;
+}
+
+.export-cover {
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: #f7f2ea;
+}
+
+.export-meta {
+  color: #8a7a6d;
+  margin-top: 4px;
+}
+
+.export-day {
+  margin-top: 24px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.export-map {
+  width: 100%;
+  max-width: 600px;
+  height: auto;
+  border-radius: var(--radius);
+  margin: 10px 0;
+}
+
+.export-map-unavailable {
+  color: #8a7a6d;
+  font-size: 0.9rem;
+}
+
+.export-stops {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.export-stop {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.export-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 10px;
+  flex-shrink: 0;
+  background: #f7f2ea;
+}
+
+.export-stop div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.export-stop span {
+  color: #8a7a6d;
+  font-size: 0.85rem;
+}
+
+@media print {
+  .no-print {
+    display: none;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .export-page {
+    max-width: none;
+    padding: 0;
+  }
+}
+
 @media (max-width: 480px) {
   .page {
     padding: 16px 12px 48px;
@@ -305,5 +467,14 @@ button:hover {
   .trip-cover {
     width: 100%;
     height: 140px;
+  }
+
+  .run-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .export-stop {
+    align-items: flex-start;
   }
 }

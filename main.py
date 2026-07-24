@@ -97,6 +97,7 @@ def execute_run(run_id: str, request: PlanRequest, queue: asyncio.Queue, loop: a
                     request.days,
                     request.start_date,
                     final_content.get("day_allocations") or {},
+                    final_content.get("day_polylines") or {},
                 )
             except Exception:
                 pass
@@ -132,6 +133,13 @@ async def stream_plan(run_id: str) -> StreamingResponse:
     return StreamingResponse(event_source(), media_type="text/event-stream")
 
 
+@app.get("/api/runs")
+async def get_runs() -> list[dict]:
+    """Every past run regardless of outcome (ticket #9) -- distinct from
+    /api/trips, which only lists successful runs saved as trips (ticket #7)."""
+    return storage.list_runs()
+
+
 @app.get("/api/plan/{run_id}/replay")
 async def replay_plan(run_id: str) -> dict:
     record = storage.load_run(run_id)
@@ -155,6 +163,14 @@ async def get_config() -> dict:
 @app.get("/api/trips")
 async def get_trips() -> list[dict]:
     return trips.list_trips()
+
+
+@app.get("/api/trips/{trip_id}")
+async def get_trip(trip_id: str) -> dict:
+    trip = trips.get_trip(trip_id)
+    if trip is None:
+        raise HTTPException(status_code=404, detail="Unknown trip_id")
+    return trip
 
 
 @app.delete("/api/trips/{trip_id}")

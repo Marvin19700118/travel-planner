@@ -35,6 +35,19 @@ def test_delete_trip_returns_false_for_unknown_trip(tmp_path, monkeypatch):
     assert trips.delete_trip("never-existed") is False
 
 
+def test_get_trip_returns_the_saved_record(tmp_path, monkeypatch):
+    monkeypatch.setattr(trips, "TRIPS_DIR", tmp_path / "trips")
+    record = {"trip_id": "abc", "city": "Paris"}
+    trips.save_trip("abc", record)
+
+    assert trips.get_trip("abc") == record
+
+
+def test_get_trip_returns_none_for_unknown_trip(tmp_path, monkeypatch):
+    monkeypatch.setattr(trips, "TRIPS_DIR", tmp_path / "trips")
+    assert trips.get_trip("never-existed") is None
+
+
 def test_list_trips_is_sorted_by_filename(tmp_path, monkeypatch):
     monkeypatch.setattr(trips, "TRIPS_DIR", tmp_path / "trips")
     trips.save_trip("b-trip", {"trip_id": "b-trip"})
