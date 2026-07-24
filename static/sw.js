@@ -10,7 +10,7 @@
 // it is what actually gets a changed shell asset in front of a returning
 // user -- without it, a browser that already installed this service
 // worker keeps serving what it cached under the old name indefinitely.
-const CACHE_NAME = "travel-planner-shell-v5";
+const CACHE_NAME = "travel-planner-shell-v6";
 const SHELL_ASSETS = [
   "/",
   "/style.css",

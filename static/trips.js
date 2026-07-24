@@ -20,6 +20,16 @@ function renderTripCard(trip) {
   const meta = document.createElement("p");
   meta.textContent = `${dayCountLabel(trip.days)} · ${trip.start_date}`;
 
+  // Older saved trips (before infeasible/failed_max_iterations could be
+  // saved) have no status field at all -- skip the badge rather than show
+  // an empty pill.
+  let badge = null;
+  if (trip.status) {
+    badge = document.createElement("span");
+    badge.className = `run-status run-status-${trip.status}`;
+    badge.textContent = STATUS_LABELS[trip.status] || trip.status;
+  }
+
   const exportLink = document.createElement("a");
   exportLink.href = `/export.html?trip_id=${encodeURIComponent(trip.trip_id)}`;
   exportLink.className = "trip-export";
@@ -54,6 +64,9 @@ function renderTripCard(trip) {
 
   info.appendChild(title);
   info.appendChild(meta);
+  if (badge) {
+    info.appendChild(badge);
+  }
   info.appendChild(exportLink);
   info.appendChild(deleteButton);
   card.appendChild(img);

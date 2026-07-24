@@ -54,15 +54,20 @@ def _fetch_photo_bytes(photo_reference: str | None) -> bytes | None:
 
 
 def save_completed_trip(
-    trip_id: str, city: str, days: int, start_date: str, day_allocations: dict, day_polylines: dict
+    trip_id: str, city: str, days: int, start_date: str, day_allocations: dict, day_polylines: dict, status: str
 ) -> None:
-    """Called once, when a run reaches status=="done". Fetches a real photo
-    per attraction and generates (or falls back for) an AI cover image --
-    every image lookup happens here, exactly once; viewing the saved trip
-    later never re-triggers one. day_polylines is stored verbatim (already
-    computed by the same Directions call the touring-budget check made) so
-    the one-page export view (#8) can render a static map per day without
-    a new route-calculation call."""
+    """Called once a run has produced a real day allocation, whether or not
+    it fully fit the touring budget (maintainer decision, 2026-07-24: a
+    best-effort infeasible/failed_max_iterations itinerary is still worth
+    seeing on a map and keeping around, not just a done one). status is
+    stored honestly rather than rewritten to "done", so callers can still
+    tell a best-effort result apart from a fully-fit one. Fetches a real
+    photo per attraction and generates (or falls back for) an AI cover
+    image -- every image lookup happens here, exactly once; viewing the
+    saved trip later never re-triggers one. day_polylines is stored verbatim
+    (already computed by the same Directions call the touring-budget check
+    made) so the one-page export view (#8) can render a static map per day
+    without a new route-calculation call."""
     enriched_allocations: dict[str, list[dict]] = {}
     fallback_cover_bytes: bytes | None = None
 
@@ -86,6 +91,7 @@ def save_completed_trip(
             "city": city,
             "days": days,
             "start_date": start_date,
+            "status": status,
             "cover_image_url": cover_image_url,
             "day_allocations": enriched_allocations,
             "day_polylines": day_polylines,

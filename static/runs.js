@@ -2,14 +2,6 @@ const runsList = document.getElementById("runs-list");
 const runsEmpty = document.getElementById("runs-empty");
 const runsError = document.getElementById("runs-error");
 
-const STATUS_LABELS = {
-  done: "已完成",
-  infeasible: "不合適",
-  no_results: "無結果",
-  failed_max_iterations: "已用完嘗試次數",
-  in_progress: "進行中",
-};
-
 function renderRunCard(run) {
   const card = document.createElement("div");
   card.className = "run-card";

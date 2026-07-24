@@ -104,7 +104,11 @@ function showResult(finalContent) {
   resultMessage.textContent = finalContent.final_report;
   renderItinerary(finalContent.day_allocations);
 
-  if (finalContent.status === "done") {
+  // Show the map whenever there's an actual day allocation to draw, not
+  // just for a fully-fit "done" result -- a best-effort infeasible/
+  // failed_max_iterations itinerary is still worth seeing on a map
+  // (maintainer decision, 2026-07-24).
+  if (finalContent.day_allocations && Object.keys(finalContent.day_allocations).length) {
     showMap(finalContent.day_allocations, finalContent.day_polylines);
   } else {
     mapSection.classList.add("hidden");

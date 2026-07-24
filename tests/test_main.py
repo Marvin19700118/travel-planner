@@ -131,15 +131,35 @@ def test_a_successful_run_is_auto_saved_as_a_trip(client):
     assert len(saved) == 1
     assert saved[0]["trip_id"] == run_id
     assert saved[0]["city"] == "testville"
+    assert saved[0]["status"] == "done"
     assert saved[0]["cover_image_url"] is not None
 
 
-def test_an_infeasible_run_is_not_saved_as_a_trip(client):
+def test_an_infeasible_run_with_a_day_allocation_is_still_saved_as_a_trip(client):
+    """A best-effort itinerary that didn't fit the touring budget is still
+    worth seeing on a map and keeping around (maintainer decision,
+    2026-07-24) -- the status is stored honestly, not rewritten to "done"."""
     import trips as trips_module
 
     run_id = client.post(
         "/api/plan",
         json={"city": "sprawlville", "start_date": "2026-08-01", "days": 1, "preferences": ["hiking", "golf"]},
+    ).json()["run_id"]
+    _collect_sse_events(client, run_id)
+
+    saved = trips_module.list_trips()
+    assert len(saved) == 1
+    assert saved[0]["trip_id"] == run_id
+    assert saved[0]["status"] == "infeasible"
+    assert saved[0]["day_allocations"]
+
+
+def test_a_no_results_run_has_nothing_to_save_and_is_not_saved_as_a_trip(client):
+    import trips as trips_module
+
+    run_id = client.post(
+        "/api/plan",
+        json={"city": "emptyville", "start_date": "2026-08-01", "days": 1, "preferences": ["museum"]},
     ).json()["run_id"]
     _collect_sse_events(client, run_id)
 

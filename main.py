@@ -84,20 +84,27 @@ def execute_run(run_id: str, request: PlanRequest, queue: asyncio.Queue, loop: a
         )
     finally:
         storage.save_run(run_id, request.model_dump(), events)
-        # Only a genuinely successful run gets added to the saved-trips list
-        # (ticket #7) -- infeasible/no_results/failed_max_iterations runs
-        # stay visible only through replay (ticket #9), never here. A
-        # failure while saving must never look like the planning run itself
-        # failed -- the run already finished and streamed its real result.
-        if final_content is not None and final_content.get("status") == "done":
+        # Any run that produced an actual day allocation gets saved to the
+        # trips list -- even infeasible/failed_max_iterations ones, since a
+        # best-effort itinerary that didn't quite fit the touring budget is
+        # still worth seeing on a map and keeping around (maintainer
+        # decision, 2026-07-24: the earlier "only done" restriction was too
+        # strict). The status is stored honestly, not rewritten to "done".
+        # no_results never has a day_allocations to begin with (prepare()
+        # returns before the loop starts), so it's naturally excluded here
+        # without needing an explicit status check. A failure while saving
+        # must never look like the planning run itself failed -- the run
+        # already finished and streamed its real result.
+        if final_content is not None and final_content.get("day_allocations"):
             try:
                 trips.save_completed_trip(
                     run_id,
                     request.city,
                     request.days,
                     request.start_date,
-                    final_content.get("day_allocations") or {},
+                    final_content["day_allocations"],
                     final_content.get("day_polylines") or {},
+                    final_content["status"],
                 )
             except Exception:
                 pass

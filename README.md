@@ -8,6 +8,8 @@ Implemented so far: [#2](https://github.com/Marvin19700118/travel-planner/issues
 
 **A note for whoever changes `static/style.css`, `static/app.js`, `static/manifest.json`, or the icon files next:** bump `CACHE_NAME` in `static/sw.js`. The service worker caches those files under that name; without a bump, a browser that already installed it keeps serving what it cached before your change, indefinitely. This bit me twice while building #6 — CSS and JS fixes silently didn't take effect in a browser that had already installed the previous version, until I bumped the cache name.
 
+**Maintainer decision, 2026-07-24 — a best-effort itinerary is still worth keeping:** originally, only a fully-fit `done` run got its map shown and got saved to the trips list; `infeasible`/`failed_max_iterations` runs were only viewable through replay (#9). That turned out too strict in practice — an itinerary that hit the 8-iteration cap while still 2 hours over budget on one day is still a real, mostly-useful plan. Now *any* run that produced a real day allocation gets its map shown (`static/viewer.js`'s `showResult`) and gets saved (`main.py`'s `execute_run`), whatever its status — the status itself is stored and shown honestly (`已用完嘗試次數`/`不合適` badges on `trips.html`, not silently relabeled `done`). Only `no_results` stays excluded, since it never has a day allocation to show in the first place.
+
 ## Setup
 
 ```bash
