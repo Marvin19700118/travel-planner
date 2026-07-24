@@ -67,4 +67,17 @@ if ("serviceWorker" in navigator) {
       // just without the fast-repeat-load / offline-shell benefits.
     });
   });
+  // Live-discovered 2026-07-24: sw.js's skipWaiting() activates a new
+  // worker immediately, but this tab's already-loaded HTML/JS is still the
+  // old version until it reloads -- without this, a returning user with a
+  // pinned/open tab could keep submitting against a stale form (e.g.
+  // missing a brand-new required field) indefinitely. `reloaded` survives
+  // repeated "controllerchange" events but resets on an actual reload, so
+  // this can never loop.
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloaded) return;
+    reloaded = true;
+    window.location.reload();
+  });
 }

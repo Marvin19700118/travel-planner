@@ -10,7 +10,7 @@
 // it is what actually gets a changed shell asset in front of a returning
 // user -- without it, a browser that already installed this service
 // worker keeps serving what it cached under the old name indefinitely.
-const CACHE_NAME = "travel-planner-shell-v7";
+const CACHE_NAME = "travel-planner-shell-v8";
 const SHELL_ASSETS = [
   "/",
   "/style.css",
@@ -53,11 +53,22 @@ self.addEventListener("install", (event) => {
   // pre-deploy assets. {cache: "reload"} forces each one to actually hit
   // the network, so the shell that gets cached is always what's live now.
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      Promise.all(
-        SHELL_ASSETS.map((url) => fetch(url, { cache: "reload" }).then((response) => cacheIfOk(cache, url, response)))
+    caches
+      .open(CACHE_NAME)
+      .then((cache) =>
+        Promise.all(
+          SHELL_ASSETS.map((url) => fetch(url, { cache: "reload" }).then((response) => cacheIfOk(cache, url, response)))
+        )
       )
-    )
+      // Live-discovered 2026-07-24: without this, a new CACHE_NAME sits in
+      // the "waiting" state until every tab open on the old worker is
+      // closed -- a returning user with a pinned/open tab could keep
+      // getting the pre-update shell (missing a brand-new form field,
+      // stale JS, etc.) indefinitely. skipWaiting() activates the new
+      // worker immediately; the client-side "controllerchange" reload
+      // (see app.js/trips.js/runs.js/replay.js) is what actually gets the
+      // new assets in front of the user once this takes over.
+      .then(() => self.skipWaiting())
   );
 });
 

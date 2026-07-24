@@ -61,6 +61,15 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("/sw.js").catch(() => {});
   });
+  // See app.js for why this reload is needed -- sw.js's skipWaiting()
+  // activates a new worker immediately, but this tab's already-loaded
+  // HTML/JS is still the old version until it reloads.
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloaded) return;
+    reloaded = true;
+    window.location.reload();
+  });
 }
 
 loadRuns();
