@@ -4,14 +4,21 @@ open access (so local dev and the existing test suite need no changes),
 set means every request -- API and static files alike -- needs a matching
 cookie first.
 
-A correct password sets an HttpOnly cookie (not read by JS, not something
-app.js has to remember to attach to every fetch/EventSource call) that the
-browser then sends automatically on every subsequent same-origin request,
-including the SSE stream and static asset loads.
+A correct password sets an HttpOnly, Secure cookie (not read by JS, not
+something app.js has to remember to attach to every fetch/EventSource call)
+that the browser then sends automatically on every subsequent same-origin
+request, including the SSE stream and static asset loads. The cookie's
+value *is* the shared password, not a derived session token, so it needs
+the same protection a credential would: Secure (never sent over plain
+HTTP) and compared with hmac.compare_digest (constant-time) rather than
+`==`. `Secure` cookies are still sent to `localhost`/`127.0.0.1` over HTTP
+by every major browser (treated as a potentially-trustworthy origin), so
+this doesn't complicate local dev.
 """
 
 from __future__ import annotations
 
+import hmac
 import os
 
 from starlette.requests import Request
@@ -51,7 +58,8 @@ def is_authorized(request: Request) -> bool:
     secret = _shared_secret()
     if secret is None:
         return True
-    return request.cookies.get(COOKIE_NAME) == secret
+    cookie = request.cookies.get(COOKIE_NAME)
+    return cookie is not None and hmac.compare_digest(cookie, secret)
 
 
 def render_login_page(*, error: bool = False) -> HTMLResponse:
@@ -62,10 +70,16 @@ def render_login_page(*, error: bool = False) -> HTMLResponse:
 async def handle_login(request: Request) -> Response:
     form = await request.form()
     secret = _shared_secret()
-    if secret and form.get("password") == secret:
+    submitted = form.get("password")
+    if secret and isinstance(submitted, str) and hmac.compare_digest(submitted, secret):
         response: Response = RedirectResponse(url="/", status_code=303)
         response.set_cookie(
-            COOKIE_NAME, secret, httponly=True, samesite="lax", max_age=_COOKIE_MAX_AGE_SECONDS
+            COOKIE_NAME,
+            secret,
+            httponly=True,
+            samesite="lax",
+            secure=True,
+            max_age=_COOKIE_MAX_AGE_SECONDS,
         )
         return response
     return render_login_page(error=True)
