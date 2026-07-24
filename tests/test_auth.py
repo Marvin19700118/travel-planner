@@ -65,3 +65,22 @@ def test_a_fresh_browser_with_no_cookie_is_still_blocked_after_someone_else_logg
 
     with _client() as fresh_client:
         assert fresh_client.get("/").status_code == 401
+
+
+def test_get_login_shows_the_form_instead_of_405ing(monkeypatch):
+    monkeypatch.setenv("SHARED_SECRET", "correct-password")
+    with _client() as client:
+        response = client.get("/login")
+        assert response.status_code == 401
+        assert "password" in response.text.lower()
+
+
+def test_an_accidentally_empty_shared_secret_fails_closed_not_open(monkeypatch):
+    # A misconfigured deploy (e.g. a broken env var substitution) could
+    # leave SHARED_SECRET set to "". That must still block access, not
+    # silently open the whole app to the public.
+    monkeypatch.setenv("SHARED_SECRET", "")
+    with _client() as client:
+        assert client.get("/").status_code == 401
+        login_response = client.post("/login", data={"password": ""})
+        assert login_response.status_code == 401

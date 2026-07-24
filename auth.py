@@ -51,7 +51,14 @@ _LOGIN_PAGE = """<!doctype html>
 
 
 def _shared_secret() -> str | None:
-    return os.environ.get("SHARED_SECRET") or None
+    """None means "not set at all" -> the gate is off (opt-in design). A
+    present-but-empty value is kept distinct and deliberately NOT treated
+    as "off": a misconfigured deploy that ends up with SHARED_SECRET="" (a
+    broken env var substitution, say) should fail closed, not silently open
+    the whole app to the public. handle_login's `if secret and ...` check
+    means an empty secret can never be logged into, so this fails closed
+    without any extra branching."""
+    return os.environ.get("SHARED_SECRET")
 
 
 def is_authorized(request: Request) -> bool:
@@ -59,7 +66,9 @@ def is_authorized(request: Request) -> bool:
     if secret is None:
         return True
     cookie = request.cookies.get(COOKIE_NAME)
-    return cookie is not None and hmac.compare_digest(cookie, secret)
+    if not cookie:
+        return False
+    return hmac.compare_digest(cookie, secret)
 
 
 def render_login_page(*, error: bool = False) -> HTMLResponse:

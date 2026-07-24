@@ -32,6 +32,11 @@ async def require_shared_secret(request: Request, call_next):
     return auth.render_login_page()
 
 
+@app.get(auth.LOGIN_PATH)
+async def login_page():
+    return auth.render_login_page()
+
+
 @app.post(auth.LOGIN_PATH)
 async def login(request: Request):
     return await auth.handle_login(request)
