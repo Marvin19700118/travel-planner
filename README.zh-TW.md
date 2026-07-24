@@ -37,6 +37,7 @@ python -m venv .venv
 - `agent/llm.py` 的 Gemini 整合使用 `google-genai` SDK。`gemini-2.0-flash` 和 `gemini-2.0-flash-preview-image-generation` 兩個模型其實都已經停用（回傳 `404 NOT_FOUND`，訊息是「no longer available」，即使 `models.list()` 裡仍然列得出來）—— 已改用 `gemini-3.1-flash-lite` / `gemini-3.1-flash-image`（依維護者偏好選用 3.1 系列），兩者都已在真實部署中端到端驗證成功，包含產生出一筆真實的已儲存行程，附上真實景點照片與真實 AI 封面插畫。
 - 地圖（`static/app.js`）部署前用一個佔位金鑰驗證過：日期分頁籤、標記／路線繪製邏輯、腳本載入都正常運作。第一個真正部署上線的 `GOOGLE_MAPS_JS_API_KEY` 在瀏覽器裡實際測試時仍然失敗（跳出 Google 自己的錯誤畫面），即使用 `curl` 打 `/maps/api/js` 這個啟動腳本網址永遠都回 200 —— 真正的金鑰／參照網址檢查是在腳本的執行階段、真正在瀏覽器裡初始化地圖時才會發生，`curl` 沒辦法模擬這個過程。後來換成另一個只限制給 Maps JavaScript API 用的金鑰，確認可以正常運作。另外，`google.maps.Marker` 在上游已被標示為棄用，建議改用 `AdvancedMarkerElement`；這裡先維持原樣，因為要遷移需要從 Cloud Console 另外申請一個 Map ID（又是一個新的設定步驟），而且 `Marker` 目前仍完全受支援，官方也還沒公告停止支援的時間。
 - **#8 的 Static Maps API**：即時測試時，第一個部署所用的金鑰回傳了 `403`（「This API key is not authorized to use this service or API」）—— 跟上面 Weather 金鑰限制屬於同一類問題，只是換了另一組金鑰／API。因應這個狀況強化了 `static/export.js`：靜態地圖圖片載入失敗時（`<img onerror>`）現在會換成跟「地圖尚未設定」一樣的文字提示，而不是在列印頁面留下一張壞圖示，所以這裡會優雅降級而不是顯得像壞掉一樣。後來發現這其實是架構上的問題，不只是少勾一個選項：一個限制給 Maps JavaScript API 用的瀏覽器端金鑰，沒辦法同時再授權給 Maps Static API，除非放寬這個金鑰的限制範圍 —— 所以把 `GOOGLE_MAPS_STATIC_API_KEY` 拆成獨立的環境變數（見上方表格），每個金鑰各自只限制在它真正需要的那一個 API。已用一個專用的 Static Maps 金鑰確認可以正常運作。
+- **出發地點來回行程 + 時間表 + 介紹文字**：已用真實金鑰對部署後的 app 做過即時驗證（一次真實的台北／「Taipei 101」出發行程）—— Directions 來回路線、以 08:00 為錨點且正確反映真實出發地點交通分鐘數的每站抵達／離開時間（例如第一站是 `08:07` 而不是死板的 `08:00`），以及每個景點的 Gemini 繁體中文介紹文字，全部端到端正常運作，完全不需要再改任何程式碼。
 
 ## 本機執行
 
