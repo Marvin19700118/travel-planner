@@ -71,6 +71,7 @@ def test_search_places_maps_category_to_a_query_and_estimates_duration(monkeypat
 
     assert captured["url"] == tools._PLACES_SEARCH_URL
     assert captured["json"]["textQuery"] == "museums in Paris"
+    assert captured["json"]["pageSize"] == tools._MAX_RESULTS_PER_CATEGORY
     assert captured["headers"]["X-Goog-Api-Key"] == "test-key"
     assert "places.photos" in captured["headers"]["X-Goog-FieldMask"]
     assert results == [

@@ -26,6 +26,17 @@ _PLACES_BASE_URL = "https://places.googleapis.com/v1"
 
 _REQUEST_TIMEOUT_SECONDS = 10.0
 
+# Live-discovered 2026-07-24 (first real deploy): Places Text Search (New)
+# returns up to 20 results per query by default. graph.py's _initial_allocation
+# round-robins every candidate across days with no cap of its own, and its
+# trim loop only removes one item per iteration (max 8 iterations) -- fine
+# against the small TEST_MODE fixtures (2-3 candidates per category), but
+# with 2 real preferences that's up to 40 candidates piled onto 1-2 days
+# (~30h/day observed live), which 8 trims can never claw back down to an
+# 8-hour budget. Capping the query itself keeps the initial allocation close
+# enough to fittable for the existing trim loop to actually converge.
+_MAX_RESULTS_PER_CATEGORY = 5
+
 # Preference category -> Places Text Search query term.
 _CATEGORY_QUERY_TERM = {
     "museum": "museums",
@@ -97,7 +108,7 @@ def search_places(city: str, category: str) -> list[dict]:
     query_term = _CATEGORY_QUERY_TERM.get(category, category)
     response = httpx.post(
         _PLACES_SEARCH_URL,
-        json={"textQuery": f"{query_term} in {city}"},
+        json={"textQuery": f"{query_term} in {city}", "pageSize": _MAX_RESULTS_PER_CATEGORY},
         headers={
             "Content-Type": "application/json",
             "X-Goog-Api-Key": key,
