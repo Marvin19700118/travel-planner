@@ -42,7 +42,7 @@ def test_wrong_password_is_rejected_and_sets_no_cookie(monkeypatch):
     with _client() as client:
         response = client.post("/login", data={"password": "wrong"})
         assert response.status_code == 401
-        assert "shared_secret" not in response.cookies
+        assert "__session" not in response.cookies
 
 
 def test_correct_password_sets_a_cookie_that_then_unlocks_everything(monkeypatch):

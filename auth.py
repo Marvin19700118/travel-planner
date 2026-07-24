@@ -24,7 +24,15 @@ import os
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
-COOKIE_NAME = "shared_secret"
+
+# Named exactly "__session" on purpose (live-corrected 2026-07-24, first
+# real deploy): Firebase Hosting's CDN strips every cookie except this one
+# specially-named cookie from GET/HEAD requests before forwarding to
+# Cloud Run -- confirmed live (a valid cookie named "shared_secret" reached
+# Cloud Run fine on POST, which bypasses the CDN cache entirely since POST
+# is never cacheable, but was silently stripped on GET, which goes through
+# the cache layer). See https://firebase.google.com/docs/hosting/manage-cache.
+COOKIE_NAME = "__session"
 LOGIN_PATH = "/login"
 _COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
 
