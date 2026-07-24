@@ -186,6 +186,15 @@ def test_unknown_trip_image_returns_404(client):
     assert response.status_code == 404
 
 
+def test_trip_image_path_traversal_is_rejected(client, tmp_path):
+    outside_file = tmp_path / "secret.txt"
+    outside_file.write_bytes(b"top secret run log")
+
+    response = client.get("/images/%2E%2E/secret.txt")
+
+    assert response.status_code == 404
+
+
 def test_invalid_request_is_rejected_before_a_run_starts(client):
     response = client.post(
         "/api/plan",

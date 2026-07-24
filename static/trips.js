@@ -1,5 +1,6 @@
 const tripsList = document.getElementById("trips-list");
 const tripsEmpty = document.getElementById("trips-empty");
+const tripsError = document.getElementById("trips-error");
 
 function dayCountLabel(days) {
   return `${days} day${days === 1 ? "" : "s"}`;
@@ -28,7 +29,22 @@ function renderTripCard(trip) {
   deleteButton.className = "trip-delete";
   deleteButton.addEventListener("click", async () => {
     deleteButton.disabled = true;
-    await fetch(`/api/trips/${trip.trip_id}`, { method: "DELETE" });
+    let response;
+    try {
+      response = await fetch(`/api/trips/${trip.trip_id}`, { method: "DELETE" });
+    } catch {
+      tripsError.textContent = "Couldn't delete — check your connection and try again.";
+      tripsError.classList.remove("hidden");
+      deleteButton.disabled = false;
+      return;
+    }
+    if (!response.ok) {
+      tripsError.textContent = "Couldn't delete — please try again.";
+      tripsError.classList.remove("hidden");
+      deleteButton.disabled = false;
+      return;
+    }
+    tripsError.classList.add("hidden");
     card.remove();
     if (!tripsList.children.length) {
       tripsEmpty.classList.remove("hidden");
@@ -44,7 +60,20 @@ function renderTripCard(trip) {
 }
 
 async function loadTrips() {
-  const response = await fetch("/api/trips");
+  let response;
+  try {
+    response = await fetch("/api/trips");
+  } catch {
+    tripsError.textContent = "Couldn't load saved trips — check your connection and try again.";
+    tripsError.classList.remove("hidden");
+    return;
+  }
+  if (!response.ok) {
+    tripsError.textContent = "Couldn't load saved trips — please try again.";
+    tripsError.classList.remove("hidden");
+    return;
+  }
+  tripsError.classList.add("hidden");
   const savedTrips = await response.json();
 
   if (!savedTrips.length) {

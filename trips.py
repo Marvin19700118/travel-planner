@@ -58,14 +58,14 @@ def save_completed_trip(trip_id: str, city: str, days: int, start_date: str, day
         enriched_items = []
         for item in items:
             photo_bytes = _fetch_photo_bytes(item.get("photo_reference"))
-            photo_url = image_store.save_image(trip_id, photo_bytes, extension="jpg") if photo_bytes else None
+            photo_url = image_store.save_image(trip_id, photo_bytes) if photo_bytes else None
             if photo_bytes and fallback_cover_bytes is None:
                 fallback_cover_bytes = photo_bytes
             enriched_items.append({**item, "photo_url": photo_url})
         enriched_allocations[day] = enriched_items
 
     cover_bytes = llm.generate_cover_image(city) or fallback_cover_bytes
-    cover_image_url = image_store.save_image(trip_id, cover_bytes, extension="jpg") if cover_bytes else None
+    cover_image_url = image_store.save_image(trip_id, cover_bytes) if cover_bytes else None
 
     save_trip(
         trip_id,

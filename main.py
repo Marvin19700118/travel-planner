@@ -169,7 +169,7 @@ async def get_trip_image(trip_id: str, filename: str) -> Response:
     data = image_store.read_image(trip_id, filename)
     if data is None:
         raise HTTPException(status_code=404, detail="Unknown image")
-    return Response(content=data, media_type="image/jpeg")
+    return Response(content=data, media_type=image_store.media_type_for(filename))
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

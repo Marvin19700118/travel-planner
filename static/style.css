@@ -283,6 +283,11 @@ button:hover {
   margin-top: 16px;
 }
 
+.error-text {
+  color: #d64545;
+  font-weight: 600;
+}
+
 @media (max-width: 480px) {
   .page {
     padding: 16px 12px 48px;
