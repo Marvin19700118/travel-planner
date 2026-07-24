@@ -29,14 +29,20 @@ LOGIN_PATH = "/login"
 _COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
 
 _LOGIN_PAGE = """<!doctype html>
-<html><head><meta charset="utf-8"><title>Travel Planner &mdash; Sign in</title>
+<html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.json">
+<title>Travel Planner &mdash; Sign in</title>
 <style>
   body {{ font-family: -apple-system, "Noto Sans TC", sans-serif; background: #fffaf3; color: #3a2e2c;
-          display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
-  form {{ background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); width: 280px; }}
-  input {{ width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #e5ddd4; border-radius: 10px; box-sizing: border-box; }}
+          display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0;
+          padding: 16px; box-sizing: border-box; }}
+  form {{ background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+          width: 100%; max-width: 280px; box-sizing: border-box; }}
+  input {{ width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #e5ddd4; border-radius: 10px;
+           box-sizing: border-box; min-height: 44px; font-size: 1rem; }}
   button {{ width: 100%; padding: 10px; border: none; border-radius: 999px; background: #ff8c66; color: #fff;
-            font-weight: 600; cursor: pointer; font-size: 1rem; }}
+            font-weight: 600; cursor: pointer; font-size: 1rem; min-height: 44px; }}
   p.error {{ color: #d64545; margin-top: 0; }}
 </style></head>
 <body>

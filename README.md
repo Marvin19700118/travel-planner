@@ -2,7 +2,9 @@
 
 A ReAct-pattern AI agent that plans a multi-day trip. See [spec.md](spec.md) for the full product spec and the GitHub issues for the ticket breakdown.
 
-Implemented so far: [#2](https://github.com/Marvin19700118/travel-planner/issues/2) (the core loop, `TEST_MODE` fixtures), [#3](https://github.com/Marvin19700118/travel-planner/issues/3) (real Google API + Gemini integration, behind the same seam), [#4](https://github.com/Marvin19700118/travel-planner/issues/4) (the interactive map), and part of [#5](https://github.com/Marvin19700118/travel-planner/issues/5) (shared password + deployment artifacts — see "Deployment" below for what's still deferred to a first real deploy).
+Implemented so far: [#2](https://github.com/Marvin19700118/travel-planner/issues/2) (the core loop, `TEST_MODE` fixtures), [#3](https://github.com/Marvin19700118/travel-planner/issues/3) (real Google API + Gemini integration, behind the same seam), [#4](https://github.com/Marvin19700118/travel-planner/issues/4) (the interactive map), part of [#5](https://github.com/Marvin19700118/travel-planner/issues/5) (shared password + deployment artifacts — see "Deployment" below for what's still deferred to a first real deploy), and [#6](https://github.com/Marvin19700118/travel-planner/issues/6) (mobile responsive design + PWA).
+
+**A note for whoever changes `static/style.css`, `static/app.js`, `static/manifest.json`, or the icon files next:** bump `CACHE_NAME` in `static/sw.js`. The service worker caches those files under that name; without a bump, a browser that already installed it keeps serving what it cached before your change, indefinitely. This bit me twice while building #6 — CSS and JS fixes silently didn't take effect in a browser that had already installed the previous version, until I bumped the cache name.
 
 ## Setup
 
@@ -112,6 +114,8 @@ All tests run without any real key: the fixture tests set `TEST_MODE=true`, and 
 - `storage.py` — local JSONL run persistence (**not yet Firestore** — see "Deployment")
 - `auth.py` — the shared-password gate (cookie check, login page, login handler)
 - `main.py` — FastAPI app: the password middleware, `POST /api/plan`, `GET /api/plan/{run_id}/stream` (SSE), `GET /api/plan/{run_id}/replay`, `GET /api/config`, `POST /login`
-- `static/` — the plain HTML/CSS/JS frontend
+- `static/` — the plain HTML/CSS/JS frontend, responsive down to a 375px mobile viewport
+- `static/manifest.json`, `static/icon-*.png` — PWA manifest and icons (a simple sun mark on coral, matching the visual language)
+- `static/sw.js` — service worker caching the static shell only (never API responses); see the `CACHE_NAME` note above
 - `Dockerfile`, `.dockerignore` — Cloud Run container build (not yet build-tested — no local Docker)
 - `firebase.json` — Hosting config, catch-all rewrite to Cloud Run (see "Deployment" for why)

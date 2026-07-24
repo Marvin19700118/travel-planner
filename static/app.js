@@ -216,6 +216,11 @@ form.addEventListener("submit", async (submitEvent) => {
   resultView.classList.add("hidden");
   liveView.classList.remove("hidden");
 
+  if (!navigator.onLine) {
+    addStep("error", "You're offline — planning a trip needs a connection. Reconnect and try again.");
+    return;
+  }
+
   const formData = new FormData(form);
   const preferences = formData.getAll("preferences");
   const body = {
@@ -225,11 +230,17 @@ form.addEventListener("submit", async (submitEvent) => {
     preferences,
   };
 
-  const response = await fetch("/api/plan", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let response;
+  try {
+    response = await fetch("/api/plan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    addStep("error", "You're offline — planning a trip needs a connection. Reconnect and try again.");
+    return;
+  }
   if (!response.ok) {
     addStep("error", "Couldn't start planning — please check your inputs.");
     return;
@@ -254,3 +265,12 @@ form.addEventListener("submit", async (submitEvent) => {
     source.close();
   };
 });
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      // Non-fatal: the app works fine without an installed service worker,
+      // just without the fast-repeat-load / offline-shell benefits.
+    });
+  });
+}
