@@ -31,7 +31,12 @@ _COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365
 _LOGIN_PAGE = """<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#ff8c66">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Travel Planner">
 <link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon-192.png">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <title>Travel Planner &mdash; Sign in</title>
 <style>
   body {{ font-family: -apple-system, "Noto Sans TC", sans-serif; background: #fffaf3; color: #3a2e2c;

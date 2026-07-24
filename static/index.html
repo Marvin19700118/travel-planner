@@ -4,6 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#ff8c66" />
+  <!-- iOS Safari before 16.4 ignores the manifest's display:standalone and
+       needs these instead to open chrome-less from the home screen. -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Travel Planner" />
   <title>Travel Planner</title>
   <link rel="manifest" href="/manifest.json" />
   <link rel="icon" href="/icon-192.png" />

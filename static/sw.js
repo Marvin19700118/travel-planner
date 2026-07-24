@@ -10,8 +10,31 @@
 // it is what actually gets a changed shell asset in front of a returning
 // user -- without it, a browser that already installed this service
 // worker keeps serving what it cached under the old name indefinitely.
-const CACHE_NAME = "travel-planner-shell-v2";
-const SHELL_ASSETS = ["/", "/style.css", "/app.js", "/manifest.json", "/icon-192.png", "/icon-512.png"];
+const CACHE_NAME = "travel-planner-shell-v3";
+const SHELL_ASSETS = [
+  "/",
+  "/style.css",
+  "/app.js",
+  "/manifest.json",
+  "/icon-192.png",
+  "/icon-512.png",
+  "/icon-512-maskable.png",
+];
+
+// The app's auth middleware (main.py) returns a 401 login-page body for
+// *any* unauthenticated request to *any* path, not just navigations. If
+// this service worker ever (re)installs without a valid session -- e.g. a
+// CACHE_NAME bump ships while a returning user's cookie has lapsed -- a
+// naive cache.put() would happily cache that login-page HTML under the
+// "/style.css" key forever, and cache-first means it'd then be served
+// even while online, until the next CACHE_NAME bump. Only cache genuine
+// 200s; let everything else fall through to a real network request.
+function cacheIfOk(cache, url, response) {
+  if (response.ok) {
+    cache.put(url, response.clone());
+  }
+  return response;
+}
 
 self.addEventListener("install", (event) => {
   // Deliberately not cache.addAll(SHELL_ASSETS): its internal fetches can be
@@ -21,7 +44,9 @@ self.addEventListener("install", (event) => {
   // the network, so the shell that gets cached is always what's live now.
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
-      Promise.all(SHELL_ASSETS.map((url) => fetch(url, { cache: "reload" }).then((response) => cache.put(url, response))))
+      Promise.all(
+        SHELL_ASSETS.map((url) => fetch(url, { cache: "reload" }).then((response) => cacheIfOk(cache, url, response)))
+      )
     )
   );
 });

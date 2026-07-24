@@ -209,6 +209,8 @@ async function showMap(dayAllocations, dayPolylines) {
 
 loadMapsConfig();
 
+const OFFLINE_MESSAGE = "You're offline — planning a trip needs a connection. Reconnect and try again.";
+
 form.addEventListener("submit", async (submitEvent) => {
   submitEvent.preventDefault();
 
@@ -217,7 +219,7 @@ form.addEventListener("submit", async (submitEvent) => {
   liveView.classList.remove("hidden");
 
   if (!navigator.onLine) {
-    addStep("error", "You're offline — planning a trip needs a connection. Reconnect and try again.");
+    addStep("error", OFFLINE_MESSAGE);
     return;
   }
 
@@ -238,7 +240,7 @@ form.addEventListener("submit", async (submitEvent) => {
       body: JSON.stringify(body),
     });
   } catch {
-    addStep("error", "You're offline — planning a trip needs a connection. Reconnect and try again.");
+    addStep("error", OFFLINE_MESSAGE);
     return;
   }
   if (!response.ok) {
