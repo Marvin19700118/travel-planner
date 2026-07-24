@@ -2,7 +2,7 @@
 
 A ReAct-pattern AI agent that plans a multi-day trip. See [spec.md](spec.md) for the full product spec and the GitHub issues for the ticket breakdown.
 
-Implemented so far: [#2](https://github.com/Marvin19700118/travel-planner/issues/2) (the core loop, `TEST_MODE` fixtures), [#3](https://github.com/Marvin19700118/travel-planner/issues/3) (real Google API + Gemini integration, behind the same seam), [#4](https://github.com/Marvin19700118/travel-planner/issues/4) (the interactive map), part of [#5](https://github.com/Marvin19700118/travel-planner/issues/5) (shared password + deployment artifacts — see "Deployment" below for what's still deferred to a first real deploy), and [#6](https://github.com/Marvin19700118/travel-planner/issues/6) (mobile responsive design + PWA).
+Implemented so far: [#2](https://github.com/Marvin19700118/travel-planner/issues/2) (the core loop, `TEST_MODE` fixtures), [#3](https://github.com/Marvin19700118/travel-planner/issues/3) (real Google API + Gemini integration, behind the same seam), [#4](https://github.com/Marvin19700118/travel-planner/issues/4) (the interactive map), part of [#5](https://github.com/Marvin19700118/travel-planner/issues/5) (shared password + deployment artifacts — see "Deployment" below for what's still deferred to a first real deploy), [#6](https://github.com/Marvin19700118/travel-planner/issues/6) (mobile responsive design + PWA), and [#7](https://github.com/Marvin19700118/travel-planner/issues/7) (auto-saved trips with real photos + an AI cover image, and a saved-trips list page).
 
 **A note for whoever changes `static/style.css`, `static/app.js`, `static/manifest.json`, or the icon files next:** bump `CACHE_NAME` in `static/sw.js`. The service worker caches those files under that name; without a bump, a browser that already installed it keeps serving what it cached before your change, indefinitely. This bit me twice while building #6 — CSS and JS fixes silently didn't take effect in a browser that had already installed the previous version, until I bumped the cache name.
 
@@ -19,7 +19,7 @@ python -m venv .venv
 |---|---|---|
 | `TEST_MODE` | always | `true` runs entirely on fixtures (no network, no keys needed); `false` calls real Google APIs |
 | `GOOGLE_MAPS_API_KEY` | `TEST_MODE=false` | Needs Geocoding API, Places API (New), Directions API, and Weather API enabled on the same Google Cloud project |
-| `GEMINI_API_KEY` | optional, only when `TEST_MODE=false` | If unset, Thought/Reflection text falls back to the same deterministic strings used in `TEST_MODE` — the app stays fully usable with real place/weather/route data even without this key |
+| `GEMINI_API_KEY` | optional, only when `TEST_MODE=false` | If unset, Thought/Reflection text falls back to the same deterministic strings used in `TEST_MODE`, and the AI cover image is skipped in favor of a real attraction photo — the app stays fully usable with real place/weather/route data even without this key |
 | `GOOGLE_MAPS_JS_API_KEY` | to see the interactive map render | Deliberately a **separate** key from `GOOGLE_MAPS_API_KEY` — this one is exposed to the browser, so it needs Maps JavaScript API enabled and an HTTP-referrer restriction set in Cloud Console before it's safe to use anywhere but local dev. If unset, the map area shows "Map isn't configured on this deployment yet." instead of a broken blank space — the rest of the app works fine without it |
 | `SHARED_SECRET` | to require a password before anyone can use the app | Opt-in, same pattern as the others: unset means open access (local dev, existing tests need no changes). Set it before deploying anywhere public — see "Deployment" below |
 
@@ -28,6 +28,7 @@ python -m venv .venv
 - `_WEATHER_URL` in `agent/tools.py` targets Google's newer Weather API — this is the most likely to need adjusting once tested live; a forecast failure here is non-fatal (weather is reference-only) but worth checking first
 - `agent/llm.py`'s Gemini integration uses the `google-genai` SDK (`gemini-2.0-flash`) — worth confirming the model name is still current
 - The map (`static/app.js`) was verified with a placeholder key: the day tabs, marker/polyline plumbing, and script loading all work correctly (confirmed in-browser — Google's SDK itself reports `InvalidKeyMapError`/`InvalidKey`, nothing from this app's own code). It should just work once a real, referrer-restricted key is set — no code changes expected, only a first visual check. Note `google.maps.Marker` is deprecated upstream in favor of `AdvancedMarkerElement`; left as-is for now since migrating requires a Map ID from Cloud Console (another new setup step) and `Marker` is still fully supported with no discontinuation date announced
+- `agent/tools.py`'s `get_photo_bytes` (Places Photos media endpoint) and `agent/llm.py`'s `generate_cover_image` (`gemini-2.0-flash-preview-image-generation`, via `google-genai`'s `response_modalities=["TEXT", "IMAGE"]`) are both new in #7 and untested against real credentials — same caveat as the rest of this list. If image generation fails or returns no image, `save_completed_trip` in `trips.py` silently falls back to the first real attraction photo already fetched for that trip, so a saved trip should never end up with a missing cover as long as at least one attraction photo fetch succeeds. Worth a first live check once `GEMINI_API_KEY` is set: confirm the model name is still current and that `part.as_image()` still returns bytes in the same shape
 
 ## Run locally
 
@@ -93,13 +94,14 @@ Prefer Secret Manager (`--set-secrets`) over `--set-env-vars` for `GOOGLE_MAPS_A
 
 **Deferred to this first deploy** (not blocking anything else that's been built):
 - `storage.py` is still local-JSONL, not Firestore. Cloud Run's filesystem is ephemeral, so run records won't survive a redeploy or a cold restart until this is swapped. Every caller already goes through `storage.save_run`/`load_run`/`list_runs`, so swapping the implementation to `google-cloud-firestore` is expected to be an isolated change to that one file — it just couldn't be built and verified without a real Firestore instance (no local emulator available either: Firebase CLI needs a Java runtime that also isn't installed here).
+- Same story for `trips.py` (saved-trip records) and `image_store.py` (attraction/cover photos) from #7: both are local-filesystem stand-ins for Firestore and Firebase Storage respectively, for the same ephemeral-filesystem reason above. Every caller goes through `trips.save_trip`/`list_trips`/`delete_trip` and `image_store.save_image`/`read_image`/`delete_trip_images`, so each is expected to be an isolated swap once real Firestore/Storage credentials exist.
 - The `--max-instances=1` flag above is what actually satisfies "a single run's live-update stream and its background reasoning process always talk to the same instance" (the in-memory `_run_queues` dict in `main.py` doesn't work across multiple instances) — this is a deploy-time flag, not something enforced in code, so it's easy to forget on a future redeploy.
 
 ## Tests
 
 ```bash
 .venv\Scripts\python.exe -m pytest
-.venv\Scripts\python.exe -m mypy agent/ main.py storage.py auth.py --ignore-missing-imports
+.venv\Scripts\python.exe -m mypy agent/ main.py storage.py auth.py image_store.py trips.py --ignore-missing-imports
 ```
 
 All tests run without any real key: the fixture tests set `TEST_MODE=true`, and the real-API/Gemini tests monkeypatch the HTTP/SDK boundary. The password-gate tests set/unset `SHARED_SECRET` per test; no server or real cookie infrastructure needed.
@@ -112,9 +114,12 @@ All tests run without any real key: the fixture tests set `TEST_MODE=true`, and 
 - `agent/llm.py` — Gemini-backed Thought/Reflection narration, with a deterministic fallback when no key is set (tool *selection* always stays deterministic — see the module docstring)
 - `agent/graph.py` — the LangGraph loop (`think` → `act` → `reflect` → route) and the `run_planner()` generator that drives it
 - `storage.py` — local JSONL run persistence (**not yet Firestore** — see "Deployment")
+- `trips.py` — local JSON persistence for auto-saved completed trips, plus the enrichment step that fetches real attraction photos and the AI cover image (**not yet Firestore** — see "Deployment")
+- `image_store.py` — local filesystem storage for attraction/cover photos (**not yet Firebase Storage** — see "Deployment")
 - `auth.py` — the shared-password gate (cookie check, login page, login handler)
-- `main.py` — FastAPI app: the password middleware, `POST /api/plan`, `GET /api/plan/{run_id}/stream` (SSE), `GET /api/plan/{run_id}/replay`, `GET /api/config`, `POST /login`
+- `main.py` — FastAPI app: the password middleware, `POST /api/plan`, `GET /api/plan/{run_id}/stream` (SSE), `GET /api/plan/{run_id}/replay`, `GET /api/config`, `GET /api/trips`, `DELETE /api/trips/{trip_id}`, `GET /images/{trip_id}/{filename}`, `POST /login`
 - `static/` — the plain HTML/CSS/JS frontend, responsive down to a 375px mobile viewport
+- `static/trips.html`, `static/trips.js` — the saved-trips list page (cover image, city, day count, delete)
 - `static/manifest.json`, `static/icon-*.png` — PWA manifest and icons (a simple sun mark on coral, matching the visual language)
 - `static/sw.js` — service worker caching the static shell only (never API responses); see the `CACHE_NAME` note above
 - `Dockerfile`, `.dockerignore` — Cloud Run container build (not yet build-tested — no local Docker)

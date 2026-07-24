@@ -7,12 +7,14 @@ import uuid
 from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import auth
+import image_store
 import storage
+import trips
 from agent.graph import run_planner
 from agent.state import TripRequest
 
@@ -57,9 +59,13 @@ def execute_run(run_id: str, request: PlanRequest, queue: asyncio.Queue, loop: a
     and taking down the run.
     """
     events: list[dict] = []
+    final_content: dict | None = None
 
     def emit(event: dict) -> None:
+        nonlocal final_content
         events.append(event)
+        if event["type"] == "final":
+            final_content = event["content"]
         loop.call_soon_threadsafe(queue.put_nowait, event)
 
     trip = TripRequest(
@@ -78,6 +84,22 @@ def execute_run(run_id: str, request: PlanRequest, queue: asyncio.Queue, loop: a
         )
     finally:
         storage.save_run(run_id, request.model_dump(), events)
+        # Only a genuinely successful run gets added to the saved-trips list
+        # (ticket #7) -- infeasible/no_results/failed_max_iterations runs
+        # stay visible only through replay (ticket #9), never here. A
+        # failure while saving must never look like the planning run itself
+        # failed -- the run already finished and streamed its real result.
+        if final_content is not None and final_content.get("status") == "done":
+            try:
+                trips.save_completed_trip(
+                    run_id,
+                    request.city,
+                    request.days,
+                    request.start_date,
+                    final_content.get("day_allocations") or {},
+                )
+            except Exception:
+                pass
         loop.call_soon_threadsafe(queue.put_nowait, None)
 
 
@@ -128,6 +150,26 @@ async def get_config() -> dict:
     degrade to a "map unavailable" state rather than trying to load it.
     """
     return {"mapsApiKey": os.environ.get("GOOGLE_MAPS_JS_API_KEY", "")}
+
+
+@app.get("/api/trips")
+async def get_trips() -> list[dict]:
+    return trips.list_trips()
+
+
+@app.delete("/api/trips/{trip_id}")
+async def delete_trip(trip_id: str) -> dict:
+    if not trips.delete_trip(trip_id):
+        raise HTTPException(status_code=404, detail="Unknown trip_id")
+    return {"deleted": True}
+
+
+@app.get("/images/{trip_id}/{filename}")
+async def get_trip_image(trip_id: str, filename: str) -> Response:
+    data = image_store.read_image(trip_id, filename)
+    if data is None:
+        raise HTTPException(status_code=404, detail="Unknown image")
+    return Response(content=data, media_type="image/jpeg")
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

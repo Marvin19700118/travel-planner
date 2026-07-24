@@ -12,6 +12,8 @@ import main
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(main.storage, "RUN_LOG_DIR", tmp_path / "run_logs")
+    monkeypatch.setattr(main.trips, "TRIPS_DIR", tmp_path / "trips")
+    monkeypatch.setattr("image_store.IMAGE_DIR", tmp_path / "images")
     with TestClient(main.app) as c:
         yield c
 
@@ -82,6 +84,105 @@ def test_replay_returns_the_persisted_record_after_a_run_completes(client):
 
 def test_replay_of_unknown_run_id_returns_404(client):
     response = client.get("/api/plan/does-not-exist/replay")
+    assert response.status_code == 404
+
+
+def test_a_successful_run_is_auto_saved_as_a_trip(client):
+    import trips as trips_module
+
+    run_id = client.post(
+        "/api/plan",
+        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+    ).json()["run_id"]
+    _collect_sse_events(client, run_id)
+
+    saved = trips_module.list_trips()
+
+    assert len(saved) == 1
+    assert saved[0]["trip_id"] == run_id
+    assert saved[0]["city"] == "testville"
+    assert saved[0]["cover_image_url"] is not None
+
+
+def test_an_infeasible_run_is_not_saved_as_a_trip(client):
+    import trips as trips_module
+
+    run_id = client.post(
+        "/api/plan",
+        json={"city": "sprawlville", "start_date": "2026-08-01", "days": 1, "preferences": ["hiking", "golf"]},
+    ).json()["run_id"]
+    _collect_sse_events(client, run_id)
+
+    assert trips_module.list_trips() == []
+
+
+def test_a_saved_trips_attractions_have_a_real_photo_url(client):
+    import trips as trips_module
+
+    run_id = client.post(
+        "/api/plan",
+        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+    ).json()["run_id"]
+    _collect_sse_events(client, run_id)
+
+    saved = trips_module.list_trips()[0]
+    all_stops = [stop for items in saved["day_allocations"].values() for stop in items]
+
+    assert all_stops, "expected at least one attraction in the saved trip"
+    assert all(stop["photo_url"] is not None for stop in all_stops)
+
+
+def test_get_trips_endpoint_returns_saved_trips(client):
+    run_id = client.post(
+        "/api/plan",
+        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+    ).json()["run_id"]
+    _collect_sse_events(client, run_id)
+
+    response = client.get("/api/trips")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["trip_id"] == run_id
+
+
+def test_delete_trip_endpoint_removes_it_and_its_images(client):
+    run_id = client.post(
+        "/api/plan",
+        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+    ).json()["run_id"]
+    _collect_sse_events(client, run_id)
+    cover_url = client.get("/api/trips").json()[0]["cover_image_url"]
+
+    response = client.delete(f"/api/trips/{run_id}")
+
+    assert response.status_code == 200
+    assert client.get("/api/trips").json() == []
+    assert client.get(cover_url).status_code == 404
+
+
+def test_delete_unknown_trip_returns_404(client):
+    response = client.delete("/api/trips/does-not-exist")
+    assert response.status_code == 404
+
+
+def test_trip_image_endpoint_serves_the_saved_bytes(client):
+    run_id = client.post(
+        "/api/plan",
+        json={"city": "testville", "start_date": "2026-08-01", "days": 2, "preferences": ["museum", "food"]},
+    ).json()["run_id"]
+    _collect_sse_events(client, run_id)
+    cover_url = client.get("/api/trips").json()[0]["cover_image_url"]
+
+    response = client.get(cover_url)
+
+    assert response.status_code == 200
+    assert response.content  # real bytes, not empty
+
+
+def test_unknown_trip_image_returns_404(client):
+    response = client.get("/images/does-not-exist/nope.jpg")
     assert response.status_code == 404
 
 

@@ -22,6 +22,7 @@ _GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 _PLACES_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 _DIRECTIONS_URL = "https://maps.googleapis.com/maps/api/directions/json"
 _WEATHER_URL = "https://weather.googleapis.com/v1/forecast/days:lookup"
+_PLACES_BASE_URL = "https://places.googleapis.com/v1"
 
 _REQUEST_TIMEOUT_SECONDS = 10.0
 
@@ -100,7 +101,10 @@ def search_places(city: str, category: str) -> list[dict]:
         headers={
             "Content-Type": "application/json",
             "X-Goog-Api-Key": key,
-            "X-Goog-FieldMask": "places.id,places.displayName,places.location,places.types,places.formattedAddress",
+            "X-Goog-FieldMask": (
+                "places.id,places.displayName,places.location,places.types,"
+                "places.formattedAddress,places.photos"
+            ),
         },
         timeout=_REQUEST_TIMEOUT_SECONDS,
     )
@@ -110,6 +114,7 @@ def search_places(city: str, category: str) -> list[dict]:
     results = []
     for place in places:
         location = place.get("location") or {}
+        photos = place.get("photos") or []
         results.append(
             {
                 "id": place["id"],
@@ -119,6 +124,9 @@ def search_places(city: str, category: str) -> list[dict]:
                 "category": category,
                 "duration_hr": _estimate_duration_hr(place.get("types") or []),
                 "address": place.get("formattedAddress", ""),
+                # Places API New: a photo's `name` (e.g. "places/X/photos/Y") is
+                # what get_photo_bytes() needs -- not a direct image URL.
+                "photo_reference": photos[0]["name"] if photos else None,
             }
         )
     return results
@@ -179,3 +187,24 @@ def get_directions(city: str, stops: list[dict]) -> dict:
     total_seconds = sum(leg["duration"]["value"] for leg in legs)
     polyline = (routes[0].get("overview_polyline") or {}).get("points")
     return {"travel_hours": total_seconds / 3600, "polyline": polyline}
+
+
+def get_photo_bytes(photo_reference: str) -> bytes | None:
+    """Fetches the actual image bytes for a photo_reference returned by
+    search_places. Returns None if there's no reference to fetch (e.g. a
+    place with no photos) rather than raising -- a missing attraction photo
+    should never block saving the rest of a trip."""
+    if not photo_reference:
+        return None
+    if _test_mode():
+        return fixtures.get_photo_bytes(photo_reference)
+
+    key = _require_api_key()
+    response = httpx.get(
+        f"{_PLACES_BASE_URL}/{photo_reference}/media",
+        params={"key": key, "maxHeightPx": 400},
+        timeout=_REQUEST_TIMEOUT_SECONDS,
+        follow_redirects=True,
+    )
+    response.raise_for_status()
+    return response.content

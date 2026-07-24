@@ -15,17 +15,27 @@ Unknown city names (not in CITIES) simulate a geocoding failure.
 
 from __future__ import annotations
 
+import base64
+
+# A minimal valid 1x1 transparent PNG -- real bytes, not a placeholder
+# string, so code that actually decodes/stores the result (e.g. writing it
+# to a file, or a future PIL.Image.open() call) works the same way it would
+# against a real photo, just with trivial pixel content.
+_FIXTURE_PHOTO_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUAAarVyFEAAAAASUVORK5CYII="
+)
+
 CITIES: dict[str, dict] = {
     "testville": {
         "coords": (10.0, 20.0),
         "travel_hr_per_gap": 0.25,
         "candidates": {
             "museum": [
-                {"id": "m1", "name": "Testville Museum", "duration_hr": 1.5, "category": "museum", "lat": 10.01, "lng": 20.01, "address": "1 Museum Way, Testville"},
+                {"id": "m1", "name": "Testville Museum", "duration_hr": 1.5, "category": "museum", "lat": 10.01, "lng": 20.01, "address": "1 Museum Way, Testville", "photo_reference": "places/m1/photos/fixture"},
             ],
             "food": [
-                {"id": "f1", "name": "Testville Cafe", "duration_hr": 1.0, "category": "food", "lat": 10.02, "lng": 20.02, "address": "2 Cafe St, Testville"},
-                {"id": "f2", "name": "Testville Diner", "duration_hr": 1.0, "category": "food", "lat": 10.03, "lng": 20.03, "address": "3 Diner Ave, Testville"},
+                {"id": "f1", "name": "Testville Cafe", "duration_hr": 1.0, "category": "food", "lat": 10.02, "lng": 20.02, "address": "2 Cafe St, Testville", "photo_reference": "places/f1/photos/fixture"},
+                {"id": "f2", "name": "Testville Diner", "duration_hr": 1.0, "category": "food", "lat": 10.03, "lng": 20.03, "address": "3 Diner Ave, Testville", "photo_reference": "places/f2/photos/fixture"},
             ],
         },
     },
@@ -99,3 +109,7 @@ def get_directions(city: str, stops: list[dict]) -> dict:
     gaps = max(0, len(stops) - 1)
     polyline = _SAMPLE_POLYLINE if gaps > 0 else None
     return {"travel_hours": gaps * per_gap, "polyline": polyline}
+
+
+def get_photo_bytes(photo_reference: str) -> bytes:
+    return _FIXTURE_PHOTO_PNG

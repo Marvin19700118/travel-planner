@@ -25,6 +25,21 @@ import os
 
 _MODEL = "gemini-2.0-flash"
 
+# Uncertain / needs a first live check: this is the model id documented for
+# Gemini image generation at the time this was written, but that surface
+# has moved before and there was no key available to actually confirm it
+# still returns image parts. If generate_cover_image() starts returning
+# None with a real key set, check this name first.
+_IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"
+
+# Fixed on purpose: every saved trip's cover should look like it came from
+# the same illustrator, not a different style each time (spec.md section 3).
+_COVER_STYLE_PROMPT = (
+    "A bright, flat-illustration style cover image capturing the feeling of a fun trip to {city}. "
+    "Warm, sunny color palette (coral and golden tones), casual and relaxed urban mood, "
+    "no text, no watermarks, no logos."
+)
+
 
 def is_available() -> bool:
     return bool(os.environ.get("GEMINI_API_KEY"))
@@ -73,3 +88,33 @@ def narrate_reflection(context: str, fallback: str) -> str:
         "Reply with exactly one sentence, no preamble.",
         fallback,
     )
+
+
+def _generate_image(prompt: str) -> bytes | None:
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    response = client.models.generate_content(
+        model=_IMAGE_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"]),
+    )
+    for part in response.parts or []:
+        image = part.as_image()
+        if image is not None and image.image_bytes:
+            return image.image_bytes
+    return None
+
+
+def generate_cover_image(city: str) -> bytes | None:
+    """Returns AI-generated cover image bytes for a saved trip, or None if
+    no key is set or generation fails for any reason. Callers (main.py) are
+    expected to fall back to a real attraction photo when this returns
+    None, so a trip is never left without *some* cover image."""
+    if not is_available():
+        return None
+    try:
+        return _generate_image(_COVER_STYLE_PROMPT.format(city=city))
+    except Exception:
+        return None

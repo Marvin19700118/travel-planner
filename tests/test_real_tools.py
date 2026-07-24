@@ -59,6 +59,7 @@ def test_search_places_maps_category_to_a_query_and_estimates_duration(monkeypat
                         "location": {"latitude": 48.86, "longitude": 2.34},
                         "types": ["museum", "tourist_attraction"],
                         "formattedAddress": "Rue de Rivoli, 75001 Paris",
+                        "photos": [{"name": "places/p1/photos/abc123"}],
                     }
                 ]
             }
@@ -71,7 +72,7 @@ def test_search_places_maps_category_to_a_query_and_estimates_duration(monkeypat
     assert captured["url"] == tools._PLACES_SEARCH_URL
     assert captured["json"]["textQuery"] == "museums in Paris"
     assert captured["headers"]["X-Goog-Api-Key"] == "test-key"
-    assert captured["headers"]["X-Goog-FieldMask"].endswith("formattedAddress")
+    assert "places.photos" in captured["headers"]["X-Goog-FieldMask"]
     assert results == [
         {
             "id": "p1",
@@ -81,6 +82,7 @@ def test_search_places_maps_category_to_a_query_and_estimates_duration(monkeypat
             "category": "museum",
             "duration_hr": 1.5,
             "address": "Rue de Rivoli, 75001 Paris",
+            "photo_reference": "places/p1/photos/abc123",
         }
     ]
 
@@ -178,3 +180,27 @@ def test_get_directions_raises_a_clear_error_when_no_route_is_found(monkeypatch)
 
     with pytest.raises(RuntimeError, match="no route"):
         tools.get_directions("Paris", stops)
+
+
+def test_get_photo_bytes_fetches_and_follows_redirects(monkeypatch):
+    captured = {}
+
+    def fake_get(url, params, timeout, follow_redirects):
+        captured["url"] = url
+        captured["params"] = params
+        captured["follow_redirects"] = follow_redirects
+        return httpx.Response(200, content=b"fake-jpeg-bytes", request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(tools.httpx, "get", fake_get)
+
+    result = tools.get_photo_bytes("places/p1/photos/abc123")
+
+    assert captured["url"] == f"{tools._PLACES_BASE_URL}/places/p1/photos/abc123/media"
+    assert captured["params"]["key"] == "test-key"
+    assert captured["follow_redirects"] is True
+    assert result == b"fake-jpeg-bytes"
+
+
+def test_get_photo_bytes_returns_none_for_no_reference():
+    assert tools.get_photo_bytes("") is None
+    assert tools.get_photo_bytes(None) is None

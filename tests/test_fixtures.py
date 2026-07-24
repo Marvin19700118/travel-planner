@@ -22,3 +22,8 @@ def test_multi_stop_polyline_is_valid_encoded_polyline_charset():
 def test_single_stop_has_no_polyline():
     result = fixtures.get_directions("testville", [{"id": "a"}])
     assert result["polyline"] is None
+
+
+def test_photo_bytes_are_a_real_decodable_image():
+    data = fixtures.get_photo_bytes("places/m1/photos/fixture")
+    assert data.startswith(b"\x89PNG"), "fixture photo should be real PNG bytes, not a placeholder string"

@@ -63,3 +63,47 @@ def test_narrate_reflection_falls_back_if_generation_raises(monkeypatch):
     monkeypatch.setattr(llm, "_generate", lambda prompt: (_ for _ in ()).throw(RuntimeError("boom")))
 
     assert llm.narrate_reflection("context", fallback="fallback text") == "fallback text"
+
+
+def test_generate_cover_image_returns_none_when_no_key(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    assert llm.generate_cover_image("Paris") is None
+
+
+def test_generate_cover_image_returns_bytes_when_available(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+    monkeypatch.setattr(llm, "_generate_image", lambda prompt: b"fake-image-bytes")
+
+    assert llm.generate_cover_image("Paris") == b"fake-image-bytes"
+
+
+def test_generate_cover_image_prompt_includes_the_city(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+    captured = {}
+
+    def fake_generate_image(prompt):
+        captured["prompt"] = prompt
+        return b"bytes"
+
+    monkeypatch.setattr(llm, "_generate_image", fake_generate_image)
+    llm.generate_cover_image("Paris")
+
+    assert "Paris" in captured["prompt"]
+
+
+def test_generate_cover_image_returns_none_if_generation_raises(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+
+    def boom(prompt):
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(llm, "_generate_image", boom)
+
+    assert llm.generate_cover_image("Paris") is None
+
+
+def test_generate_cover_image_returns_none_if_no_image_part_found(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "key")
+    monkeypatch.setattr(llm, "_generate_image", lambda prompt: None)
+
+    assert llm.generate_cover_image("Paris") is None

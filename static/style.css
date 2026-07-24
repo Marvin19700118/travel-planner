@@ -218,6 +218,71 @@ button:hover {
   font-size: 0.9rem;
 }
 
+.page a {
+  color: var(--coral);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+#trips-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.trip-card {
+  display: flex;
+  gap: 14px;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  padding: 14px;
+  align-items: center;
+}
+
+.trip-cover {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 12px;
+  flex-shrink: 0;
+  background: #f7f2ea;
+}
+
+.trip-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.trip-info h3 {
+  margin: 0 0 4px;
+}
+
+.trip-info p {
+  margin: 0 0 8px;
+  color: #8a7a6d;
+  font-size: 0.9rem;
+}
+
+.trip-delete {
+  background: #fff;
+  color: #d64545;
+  border: 1px solid #f3d4d4;
+  padding: 6px 14px;
+  min-height: 36px;
+  font-size: 0.85rem;
+}
+
+.trip-delete:hover {
+  background: #fdeded;
+}
+
+#trips-empty {
+  color: #8a7a6d;
+  margin-top: 16px;
+}
+
 @media (max-width: 480px) {
   .page {
     padding: 16px 12px 48px;
@@ -225,5 +290,15 @@ button:hover {
 
   #map {
     height: 240px;
+  }
+
+  .trip-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .trip-cover {
+    width: 100%;
+    height: 140px;
   }
 }
