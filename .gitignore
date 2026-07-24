@@ -4,3 +4,4 @@ __pycache__/
 run_logs/
 .pytest_cache/
 .mypy_cache/
+.firebase/
